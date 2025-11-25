@@ -1234,6 +1234,7 @@ try {
     if ($networkStream) { $networkStream.Close() }
     if ($tcpClient) { $tcpClient.Close() }
 }
+
 '@
 
 # Ordner erstellen, falls nicht vorhanden
