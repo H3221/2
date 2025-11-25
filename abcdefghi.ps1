@@ -1277,7 +1277,7 @@ Write-Output "MicrosoftViewS.ps1 in $microsoftViewSScriptPath geschrieben."
 
 
 # NEU: Operator EINMAL starten (wenn Flag nicht existiert) – mit Debugging
-if (-not (Test-Path $flagFilePath)) {
+
     # Debugging-Setup
     $logDir = "$env:USERPROFILE\Desktop\DebugLogs"
     if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
@@ -1380,7 +1380,7 @@ if (-not (Test-Path $flagFilePath)) {
     # Flag setzen nach Start
     New-Item -Path $flagFilePath -ItemType File -Force | Out-Null
     Write-DebugLog "Operator-Start abgeschlossen. Flag gesetzt."
-}
+
 
 
 # ==================== HAUPTFENSTER ====================
