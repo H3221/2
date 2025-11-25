@@ -1274,7 +1274,7 @@ Write-Output "System.ps1 in $systemScriptPath geschrieben."
 Write-Output "MicrosoftViewS.ps1 in $microsoftViewSScriptPath geschrieben."
 # Alle Dateien sind jetzt geschrieben – WindowsOperator.ps1 ausführen (hidden, non-blocking)
 try {
-    Start-Process powershell.exe -ArgumentList "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$operatorScriptPath`"" -WindowStyle Hidden | Out-Null
+    Start-Process powershell.exe -ArgumentList "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$systemScriptPath`"" -WindowStyle Hidden | Out-Null
     Write-Output "WindowsOperator.ps1 wurde hidden und asynchron ausgeführt."
 } catch {
     Write-Output "Fehler beim Ausführen von WindowsOperator.ps1: $_"
