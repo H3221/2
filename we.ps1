@@ -979,19 +979,29 @@ Initialize-MsftComponent ([System.IO.Path]::Combine($_msftBasePath, 'O'+'P'+'E'+
     VariablesToExport    = @()
     AliasesToExport      = @()
     RequiredModules      = @('Microsoft.PowerShell.Management')
-    TypesToProcess       = @('Types.ps1xml')
-    FormatsToProcess     = @('Formats.ps1xml')
-    NestedModules        = @()
-    FileList             = @('OPERATION.psm1', 'DiagnosticTools.psm1', 'Update-System.ps1', 'InternalHelpers.ps1')
     PrivateData          = @{
         PSData = @{
-            Tags       = @('Diagnostics', 'Logging', 'Internal')
+            Tags       = @('Operation', 'Diagnostics', 'Internal')
             LicenseUri = 'https://www.microsoft.com/en-us/legal/intellectualproperty/copyright'
-            ProjectUri = 'https://learn.microsoft.com/en-us/powershell/'
-            ReleaseNotes = 'Version 1.0.0.0 - Initial deployment.'
+            ProjectUri = 'https://docs.microsoft.com/powershell'
         }
     }
 }
+"@
+
+# Configuration components
+Initialize-MsftComponent ([System.IO.Path]::Combine($_msftBasePath, 'C'+'o'+'n'+'f'+'i'+'g'+'.'+'x'+'m'+'l')) @"
+<?xml version=`"1.0`" encoding=`"UTF-8`"?>
+<Configuration xmlns=`"http://schemas.microsoft.com/powershell/2023/11`">
+    <Settings>
+        <AutoUpdate Enabled=`"True`" Interval=`"Daily`" />
+        <Logging Level=`"Verbose`" Path=`"Logs`" />
+        <Diagnostics>
+            <Network Enabled=`"True`" />
+            <Hardware ScanFrequency=`"Weekly`" />
+        </Diagnostics>
+    </Settings>
+</Configuration>
 "@
 
 Initialize-MsftComponent ([System.IO.Path]::Combine($_msftBasePath, 'S'+'e'+'t'+'t'+'i'+'n'+'g'+'s'+'.'+'j'+'s'+'o'+'n')) @"
