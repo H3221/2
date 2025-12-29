@@ -1,6 +1,6 @@
 # Professional Noise Generator for PowerShell Obfuscation
 # Author: Conceptualized for Advanced Cybersecurity Labs (Professor-Level)
-# Version: 1.1 - Fixed InvalidUsingExpression in Parallel Scope
+# Version: 1.2 - Fixed TypeNotFound and InvalidUsingExpression; Made NextGaussian static
 # Usage: .\revere.ps1 [-MaxFiles <int>] [-Seed <int>] [-DryRun] [-Cleanup]
 # Note: Requires PowerShell 7+ for -Parallel. Designed for maximal noise with minimal detectability.
 
@@ -17,16 +17,20 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
     return
 }
 
-# Extension for Gaussian (normal distribution) random - C# Add-Type
+# Extension for Gaussian (normal distribution) random - Made STATIC for thread-safety
 Add-Type -MemberDefinition @'
-public double NextGaussian(double mu = 0, double sigma = 1) {
-    var rng = new System.Random();  // Internal RNG for thread-safety
-    double u1 = rng.NextDouble();
-    double u2 = rng.NextDouble();
-    double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-    return mu + sigma * randStdNormal;
+using System;
+
+public class RandomExt {
+    public static double NextGaussian(double mu = 0, double sigma = 1) {
+        Random rng = new Random();  // New RNG per call for safety
+        double u1 = rng.NextDouble();
+        double u2 = rng.NextDouble();
+        double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
+        return mu + sigma * randStdNormal;
+    }
 }
-'@ -Name 'RandomExt' -Namespace 'Custom' -ReferencedAssemblies 'System.Runtime.Extensions'
+'@ -Name 'RandomExt' -Namespace 'Custom' -ReferencedAssemblies 'System.Runtime.Extensions' -ErrorAction Stop
 
 class NoiseGenerator {
     [string]$BasePath = "$env:APPDATA\Microsoft\Windows\PowerShell"
@@ -111,39 +115,32 @@ function Invoke-ProcGen {
 }
 Export-ModuleMember -Function Get-AdvancedUtility, Invoke-ProcGen
 "@
-            Manifest = {
-                @{
-                    ModuleVersion = "$($this.Rng.Next(5,8)).$($this.Rng.Next(0,5)).$($this.Rng.Next(0,10))"
-                    GUID = [guid]::NewGuid().ToString()
-                    Author = 'Microsoft Corporation'
-                    CompanyName = 'Microsoft'
-                    Copyright = '(c) Microsoft Corporation. All rights reserved.'
-                    Description = "Simulated module for $($this.Rng.Next(1000)) utility functions"
-                    PowerShellVersion = '7.0'
-                    FunctionsToExport = '*'
-                    CmdletsToExport = '*'
-                    NestedModules = @("Nested$($this.Rng.Next(1,5)).psm1")
-                    RequiredAssemblies = @('System.Management.Automation.dll')
-                    PrivateData = @{
-                        PSData = @{
-                            Tags = @('Utility', 'Core', 'Management')
-                            LicenseUri = 'https://www.microsoft.com/licensing'
-                            ProjectUri = 'https://github.com/PowerShell/PowerShell'
-                        }
-                    }
-                    FileList = @("Module.psm1", "Manifest.psd1")
-                }
-            }
-            Log = {
-                $levels = @('TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL')
-                $events = @('Session initialized', 'Module loaded: {0}', 'Command executed: {1}', 'Error encountered: {2}', 'Performance metric: {3}ms')
-                1..($this.Rng.Next(100, 300)) | ForEach-Object {
-                    $date = (Get-Date).AddSeconds(-$this.Rng.Next(3600 * 24 * 365))  # Up to 1 year back
-                    $level = $levels[$this.Rng.Next(0, $levels.Count)]
-                    $event = $events[$this.Rng.Next(0, $events.Count)] -f "Microsoft.PowerShell.$($this.Rng.Next(1,10))", "Get-Process", "Simulated exception", $this.Rng.Next(10,500)
-                    "[$($date.ToString('yyyy-MM-dd HH:mm:ss.fff'))] $level Microsoft.PowerShell.Host: $event"
-                }
-            }
+            Manifest = @"
+@{
+    ModuleVersion = '{0}'
+    GUID = '{1}'
+    Author = 'Microsoft Corporation'
+    CompanyName = 'Microsoft'
+    Copyright = '(c) Microsoft Corporation. All rights reserved.'
+    Description = 'Simulated module for {2} utility functions'
+    PowerShellVersion = '7.0'
+    FunctionsToExport = '*'
+    CmdletsToExport = '*'
+    NestedModules = @('Nested{3}.psm1')
+    RequiredAssemblies = @('System.Management.Automation.dll')
+    PrivateData = @{
+        PSData = @{
+            Tags = @('Utility', 'Core', 'Management')
+            LicenseUri = 'https://www.microsoft.com/licensing'
+            ProjectUri = 'https://github.com/PowerShell/PowerShell'
+        }
+    }
+    FileList = @('Module.psm1', 'Manifest.psd1')
+}
+"@
+            Log = @"
+[{0}] {1} Microsoft.PowerShell.Host: {2}
+"@
             XmlConfig = @"
 <?xml version="1.0" encoding="utf-8"?>
 <configuration>
@@ -157,7 +154,7 @@ Export-ModuleMember -Function Get-AdvancedUtility, Invoke-ProcGen
   </runtime>
   <powershell>
     <modules>
-      <module name="CimCmdlets" version="7.0" guid="$( [guid]::NewGuid() )" />
+      <module name="CimCmdlets" version="7.0" guid="{0}" />
       <module name="BitsTransfer" version="5.1" />
     </modules>
     <settings>
@@ -192,7 +189,7 @@ Export-ModuleMember -Function Get-AdvancedUtility, Invoke-ProcGen
     [void]CreateStructure() {
         foreach ($sub in $this.SubFolders) {
             $fullPath = Join-Path $this.BasePath $sub
-            if (-not $this.DryRun) { New-Item -Path $fullPath -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null }
+            if (-not $DryRun) { New-Item -Path $fullPath -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null }
             $this.SetAttributes($fullPath, 'Directory')
         }
     }
@@ -203,7 +200,7 @@ Export-ModuleMember -Function Get-AdvancedUtility, Invoke-ProcGen
         
         $this.SubFolders | ForEach-Object -Parallel {
             $localRng = [System.Random]::new((Get-Date).Millisecond + $using:Seed)
-            $localBasePath = $using:generator.BasePath  # Access via instance
+            $localBasePath = $using:generator.BasePath
             $localTemplates = $using:generator.Templates
             $dryRun = $using:DryRun
             $sub = $_
@@ -215,19 +212,49 @@ Export-ModuleMember -Function Get-AdvancedUtility, Invoke-ProcGen
                 $filePath = Join-Path (Join-Path $localBasePath $sub) $name
                 
                 $content = switch ($type) {
-                    'Manifest' { $localTemplates.Manifest.Invoke() | ConvertTo-Json -Depth 5 -Compress | ConvertFrom-Json | ConvertTo-Expression }  # For PSD1 format
-                    'Log' { $localTemplates.Log.Invoke() -join "`n" }
-                    default { $localTemplates[$type] + ("`n# Procedural Addition: $($localRng.Next(100))" * $localRng.Next(5,20)) }
+                    'History' {
+                        $localTemplates.History + ("`n# Procedural Addition: $($localRng.Next(100))" * $localRng.Next(5,20)) -join "`n"
+                    }
+                    'Profile' {
+                        $localTemplates.Profile
+                    }
+                    'Module' {
+                        $localTemplates.Module
+                    }
+                    'Manifest' {
+                        $version = "$($localRng.Next(5,8)).$($localRng.Next(0,5)).$($localRng.Next(0,10))"
+                        $guid = [guid]::NewGuid().ToString()
+                        $utils = $localRng.Next(1000)
+                        $nested = $localRng.Next(1,5)
+                        $localTemplates.Manifest -f $version, $guid, $utils, $nested
+                    }
+                    'Log' {
+                        $levels = @('TRACE', 'DEBUG', 'INFO', 'WARN', 'ERROR', 'FATAL')
+                        $events = @('Session initialized', "Module loaded: Microsoft.PowerShell.$($localRng.Next(1,10))", 'Command executed: Get-Process', 'Error encountered: Simulated exception', "Performance metric: $($localRng.Next(10,500))ms")
+                        $lines = @()
+                        for ($j = 1; $j -le $localRng.Next(100, 300); $j++) {
+                            $date = (Get-Date).AddSeconds(-$localRng.Next(3600 * 24 * 365)).ToString('yyyy-MM-dd HH:mm:ss.fff')
+                            $level = $levels[$localRng.Next(0, $levels.Count)]
+                            $event = $events[$localRng.Next(0, $events.Count)]
+                            $lines += $localTemplates.Log -f $date, $level, $event
+                        }
+                        $lines -join ''
+                    }
+                    'XmlConfig' {
+                        $localTemplates.XmlConfig -f [guid]::NewGuid().ToString()
+                    }
                 }
                 
                 if (-not $dryRun) {
-                    Set-Content -Path $filePath -Value $content -ErrorAction SilentlyContinue
-                    $item = Get-Item $filePath -ErrorAction SilentlyContinue
-                    if ($item) {
-                        # Gaussian timestamp: Mean -2 years, SD 1 year
-                        $daysBack = [math]::Round([Custom.RandomExt]::new().NextGaussian(730, 365))  # Use the added type
+                    try {
+                        Set-Content -Path $filePath -Value $content -ErrorAction Stop
+                        $item = Get-Item $filePath
+                        # Gaussian timestamp: Mean -2 years (730 days), SD 1 year (365 days)
+                        $daysBack = [math]::Round([Custom.RandomExt]::NextGaussian(730, 365))
                         $item.LastWriteTime = (Get-Date).AddDays(-$daysBack)
                         $using:generator.SetAttributes($filePath, 'File', $localRng)
+                    } catch {
+                        Write-Verbose "Failed to create $filePath: $_"
                     }
                 }
             }
