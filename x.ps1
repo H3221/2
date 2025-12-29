@@ -40,8 +40,12 @@ foreach ($sub in $subFolders) {
     # Zufällig Hidden setzen (30% Chance)
     if ((Get-Random -Maximum 100) -lt 30) {
         $folderItem = Get-Item $fullPath -ErrorAction SilentlyContinue
-        if ($folderItem) {
-            $folderItem.Attributes = $folderItem.Attributes -bor [System.IO.FileAttributes]::Hidden
+        if ($folderItem -and $folderItem.PSObject.Properties['Attributes'] -ne $null) {
+            try {
+                $folderItem.Attributes = $folderItem.Attributes -bor [System.IO.FileAttributes]::Hidden
+            } catch {
+                # Überspringen bei Fehlern
+            }
         }
     }
 }
@@ -161,30 +165,29 @@ for ($i = 1; $i -le $NumFiles; $i++) {
 
     if (Test-Path $filePath) {
         $item = Get-Item $filePath -ErrorAction SilentlyContinue
-        if ($item) {
-            # Zufällig ReadOnly setzen (40% Chance) - vor Hidden, da ReadOnly Metadaten erlaubt
-            if ((Get-Random -Maximum 100) -lt 40) {
-                $item.Attributes = $item.Attributes -bor [System.IO.FileAttributes]::ReadOnly
+        if ($item -and $item.PSObject.Properties['Attributes'] -ne $null) {
+            try {
+                # Zufällig ReadOnly setzen (40% Chance)
+                if ((Get-Random -Maximum 100) -lt 40) {
+                    $item.Attributes = $item.Attributes -bor [System.IO.FileAttributes]::ReadOnly
+                }
+                # Zufällig Hidden setzen (50% Chance)
+                if ((Get-Random -Maximum 100) -lt 50) {
+                    $item.Attributes = $item.Attributes -bor [System.IO.FileAttributes]::Hidden
+                }
+            } catch {
+                # Überspringen bei Attribut-Fehlern
             }
-            # Zufällig Hidden setzen (50% Chance)
-            if ((Get-Random -Maximum 100) -lt 50) {
-                $item.Attributes = $item.Attributes -bor [System.IO.FileAttributes]::Hidden
+        }
+        if ($item -and $item.PSObject.Properties['LastWriteTime'] -ne $null) {
+            try {
+                # Fake Timestamp (2020-2025)
+                $item.LastWriteTime = (Get-Date).AddDays(- (Get-Random -Maximum 1825))
+            } catch {
+                # Überspringen bei Timestamp-Fehlern
             }
-            # Fake Timestamp (2020-2025) - Metadaten, funktioniert oft trotz ReadOnly
-            $item.LastWriteTime = (Get-Date).AddDays(- (Get-Random -Maximum 1825))
         }
     }
 }
 
-# Zusätzliche fixed Files für Authentizität
-$fixedHistoryPath = Join-Path $basePath "PSReadLine\ConsoleHost_history.txt"
-if (-not (Test-Path $fixedHistoryPath)) {
-    Set-Content -Path $fixedHistoryPath -Value (($historyTemplate * 10) -join "`n") -Force
-}
-if (Test-Path $fixedHistoryPath) {
-    $fixedItem = Get-Item $fixedHistoryPath
-    $fixedItem.Attributes = $fixedItem.Attributes -bor [System.IO.FileAttributes]::ReadOnly -bor [System.IO.FileAttributes]::Hidden
-    $fixedItem.LastWriteTime = (Get-Date).AddDays(- (Get-Random -Maximum 1825))
-}
-
-Write-Host "Erweiterte Noise-Struktur erstellt: Ca. $NumFiles Dateien in $basePath (mit Hidden/ReadOnly)."
+Write-Host "Erweiterte Noise-Struktur erstellt: Ca. $NumFiles Dateien in $basePath (mit Hidden/ReadOnly). ConsoleHost_history.txt ignoriert."
