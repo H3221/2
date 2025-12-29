@@ -1,6 +1,6 @@
 # Professional Noise Generator for PowerShell Obfuscation
 # Author: Conceptualized for Advanced Cybersecurity Labs (Professor-Level)
-# Version: 1.8 - Fixed overload issue by explicit optional param handling in SetAttributes calls
+# Version: 1.9 - Fixed FormatException by robust Gaussian handling (avoid NaN/Inf)
 # Usage: .\revere.ps1 [-MaxFiles <int>] [-Seed <int>] [-DryRun] [-Cleanup]
 # Note: Compatible with PowerShell 5.1+. For large MaxFiles, it may be slower.
 
@@ -11,16 +11,19 @@ param (
     [switch]$Cleanup  # Remove all generated content
 )
 
-# Pure PowerShell Gaussian function (Box-Muller transform)
+# Pure PowerShell Gaussian function (Box-Muller transform with edge case handling)
 function NextGaussian {
     param (
         [double]$mu = 0,
         [double]$sigma = 1
     )
     $rand = New-Object System.Random
-    $u1 = $rand.NextDouble()
-    $u2 = $rand.NextDouble()
-    $randStdNormal = [math]::Sqrt(-2.0 * [math]::Log($u1)) * [math]::Sin(2.0 * [math]::PI * $u2)
+    do {
+        $u1 = $rand.NextDouble()
+        if ($u1 -eq 0) { $u1 = 1e-10 }  # Avoid log(0)
+        $u2 = $rand.NextDouble()
+        $randStdNormal = [math]::Sqrt(-2.0 * [math]::Log($u1)) * [math]::Sin(2.0 * [math]::PI * $u2)
+    } while ([double]::IsNaN($randStdNormal) -or [double]::IsInfinity($randStdNormal))
     return $mu + $sigma * $randStdNormal
 }
 
@@ -257,7 +260,7 @@ Export-ModuleMember -Function Get-AdvancedUtility, Invoke-ProcGen
                     try {
                         Set-Content -Path $filePath -Value $content -ErrorAction Stop
                         $item = Get-Item $filePath
-                        # Gaussian timestamp
+                        # Gaussian timestamp with robust function
                         $daysBack = [math]::Round( (NextGaussian -mu 730 -sigma 365) )
                         $item.LastWriteTime = (Get-Date).AddDays(-$daysBack)
                         LocalSetAttributes -Path $filePath -ItemType 'File' -LocalRng $localRng
