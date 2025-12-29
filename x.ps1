@@ -1,6 +1,6 @@
 # Professional Noise Generator for PowerShell Obfuscation
 # Author: Conceptualized for Advanced Cybersecurity Labs (Professor-Level)
-# Version: 1.6 - Removed -Parallel for compatibility with PS5.1+; Pure PS Gaussian
+# Version: 1.7 - Fixed VariableNotLocal by making $Seed a class property
 # Usage: .\revere.ps1 [-MaxFiles <int>] [-Seed <int>] [-DryRun] [-Cleanup]
 # Note: Compatible with PowerShell 5.1+. For large MaxFiles, it may be slower.
 
@@ -30,8 +30,10 @@ class NoiseGenerator {
     [hashtable]$Templates
     [array]$SubFolders
     [bool]$DryRun  # Added as class property for scope safety
+    [int]$Seed  # Added as class property to fix VariableNotLocal
 
     NoiseGenerator([int]$Seed, [bool]$DryRun) {
+        $this.Seed = $Seed
         $this.Rng = [System.Random]::new($Seed)
         $this.DryRun = $DryRun
         $this.InitializeTemplates()
@@ -193,7 +195,7 @@ Export-ModuleMember -Function Get-AdvancedUtility, Invoke-ProcGen
         $baseCount = [math]::Round($MaxFiles / $this.SubFolders.Count)
         
         foreach ($sub in $this.SubFolders) {
-            $localRng = [System.Random]::new((Get-Date).Millisecond + $Seed)
+            $localRng = [System.Random]::new((Get-Date).Millisecond + $this.Seed)  # Fixed: Use $this.Seed
             $localBasePath = $this.BasePath
             $localTemplates = $this.Templates
             $localDryRun = $this.DryRun
