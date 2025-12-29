@@ -1,6 +1,7 @@
-# Erweitertes PowerShell Script: Maximale Noise-Struktur mit Hidden/ReadOnly
-# Für TryHackMe Lab - Generiert authentische Microsoft-ähnliche Struktur
-# Usage: .\noise_advanced.ps1 [-NumFiles 500] [-Cleanup]
+# Erweitertes PowerShell Noise-Script für TryHackMe
+# Generiert eine authentisch aussehende Microsoft PowerShell-Struktur mit viel Noise
+# Usage: powershell.exe -ExecutionPolicy Bypass -File .\noise.ps1 [-NumFiles 500] [-Cleanup]
+
 param (
     [int]$NumFiles = 500,
     [switch]$Cleanup
@@ -10,16 +11,16 @@ $basePath = "$env:APPDATA\Microsoft\Windows\PowerShell"
 
 if ($Cleanup) {
     Remove-Item -Path $basePath -Recurse -Force -ErrorAction SilentlyContinue
-    Write-Host "Cleanup abgeschlossen."
+    Write-Host "Cleanup abgeschlossen: $basePath entfernt."
     return
 }
 
-# Basisordner erstellen, falls nicht vorhanden
+# Basisordner anlegen
 if (-not (Test-Path $basePath)) {
     New-Item -Path $basePath -ItemType Directory -Force | Out-Null
 }
 
-# Erweiterte Subfolders (tiefere Hierarchie)
+# Alle Unterordner (tief und realistisch)
 $subFolders = @(
     "PSReadLine", "PSReadLine\Archives", "PSReadLine\Backups", "PSReadLine\Verbose",
     "Modules\Microsoft.PowerShell.Core\5.1\Types", "Modules\Microsoft.PowerShell.Core\5.1\Formats", "Modules\Microsoft.PowerShell.Core\7.4",
@@ -32,249 +33,138 @@ $subFolders = @(
     "Temp", "Backups", "Extensions\Debuggers", "Help\Languages\en-US", "Telemetry\Logs"
 )
 
+# Ordner erstellen und teilweise verstecken
 foreach ($sub in $subFolders) {
     $fullPath = Join-Path $basePath $sub
-    if (-not (Test-Path $fullPath)) {
-        New-Item -Path $fullPath -ItemType Directory -Force | Out-Null
-    }
-    # Zufällig Hidden setzen (30% Chance)
+    New-Item -Path $fullPath -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null
+
     if ((Get-Random -Maximum 100) -lt 30) {
-        $folderItem = Get-Item $fullPath -ErrorAction SilentlyContinue
-        if ($folderItem -and $folderItem.PSObject.Properties['Attributes'] -ne $null) {
-            try {
-                $folderItem.Attributes = $folderItem.Attributes -bor [System.IO.FileAttributes]::Hidden
-            } catch {
-                # Überspringen bei Fehlern
+        $item = Get-Item $fullPath -ErrorAction SilentlyContinue
+        if ($item -and $item.PSObject.Properties['Attributes']) {
+            try { $item.Attributes = $item.Attributes -bor [System.IO.FileAttributes]::Hidden } catch {}
+        }
+    }
+}
+
+# Templates für authentische Inhalte
+$historyTemplate = @(
+    "Get-Date -Format 'yyyy-MM-dd'", "Import-Module Microsoft.PowerShell.Utility",
+    "Get-Process | Select Name, Id", "Get-Service", "Get-CimInstance Win32_OperatingSystem",
+    "Set-ExecutionPolicy RemoteSigned -Scope CurrentUser", "Update-Help -ErrorAction SilentlyContinue"
+)
+
+$profileTemplate = @"
+# Microsoft PowerShell Profile
+# Copyright (c) Microsoft Corporation
+`$ErrorActionPreference = 'Continue'
+function Prompt {
+    "PS `$PWD> "
+}
+Import-Module CimCmdlets -ErrorAction SilentlyContinue
+Write-Host "PowerShell `$(`$PSVersionTable.PSVersion) ready." -ForegroundColor Green
+"@
+
+$moduleTemplate = @"
+# Microsoft-like Module
+# Copyright (c) Microsoft Corporation
+function Get-ExampleData {
+    param([int]`$Count = 10)
+    1..`$Count | ForEach-Object { [PSCustomObject]@{Index=`$_; Value=`$_*2} }
+}
+Export-ModuleMember -Function Get-ExampleData
+"@
+
+$manifestTemplate = @"
+@{
+    ModuleVersion = '7.4.0'
+    GUID = '$(New-Guid)'
+    Author = 'Microsoft Corporation'
+    CompanyName = 'Microsoft'
+    Copyright = '(c) Microsoft Corporation. All rights reserved.'
+    FunctionsToExport = @('Get-ExampleData')
+    RequiredModules = @('Microsoft.PowerShell.Core')
+}
+"@
+
+$logEntry = "[{0}] {1}: {2}"
+
+$miscTemplate = "Temporary cache data - $(New-Guid)`nGenerated on $(Get-Date -Format o)"
+
+# Funktion: Datei in einem bestimmten Ordner erstellen (typabhängig)
+function New-NoiseFile {
+    param(
+        [string]$SubPath,
+        [string]$IndexSuffix
+    )
+
+    $fullSub = Join-Path $basePath $SubPath
+    $rand = Get-Random -Minimum 1 -Maximum 8
+
+    if ($SubPath -like "*Logs*" -or $SubPath -like "*Telemetry*") { $rand = 5 }
+    elseif ($SubPath -like "*Modules*") { $rand = Get-Random -InputObject 3,4 }
+    elseif ($SubPath -like "*Configs*") { $rand = 6 }
+    elseif ($SubPath -like "*PSReadLine*") { $rand = 1 }
+    elseif ($SubPath -like "*Scripts*") { $rand = Get-Random -InputObject 2,5 }
+
+    switch ($rand) {
+        1 { $file = "$fullSub\History_$IndexSuffix.txt";          $content = ($historyTemplate | Get-Random -Count (Get-Random -Min 15 -Max 40)) -join "`n" }
+        2 { $file = "$fullSub\Profile_$IndexSuffix.ps1";          $content = $profileTemplate + "`n# Custom $IndexSuffix" }
+        3 { $file = "$fullSub\Module_$IndexSuffix.psm1";          $content = $moduleTemplate }
+        4 { $file = "$fullSub\Manifest_$IndexSuffix.psd1";        $content = $manifestTemplate }
+        5 { $file = "$fullSub\Log_$IndexSuffix.log";              $content = (1..(Get-Random -Min 30 -Max 80) | ForEach-Object { $logEntry -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), (Get-Random -InputObject "INFO","WARN","ERROR"), "Event $_ in $SubPath" }) -join "`n" }
+        6 { $file = "$fullSub\Config_$IndexSuffix.xml";           $content = "<Config><Version>7.4</Version><Enabled>true</Enabled></Config>" }
+        default { $file = "$fullSub\Misc_$IndexSuffix.txt";       $content = $miscTemplate }
+    }
+
+    if (-not (Test-Path $file)) {
+        try {
+            Set-Content -Path $file -Value $content -Force -ErrorAction Stop
+        } catch { return }
+    }
+
+    if (Test-Path $file) {
+        $item = Get-Item $file -ErrorAction SilentlyContinue
+        if ($item) {
+            if ($item.PSObject.Properties['Attributes']) {
+                try {
+                    if ((Get-Random -Maximum 100) -lt 40) { $item.Attributes = $item.Attributes -bor [System.IO.FileAttributes]::ReadOnly }
+                    if ((Get-Random -Maximum 100) -lt 50) { $item.Attributes = $item.Attributes -bor [System.IO.FileAttributes]::Hidden }
+                } catch {}
+            }
+            if ($item.PSObject.Properties['LastWriteTime']) {
+                try {
+                    $item.LastWriteTime = (Get-Date).AddDays(- (Get-Random -Maximum 1825))  # 2020-2025
+                } catch {}
             }
         }
     }
 }
 
-# Erweiterte Templates (komplexer, sinnvoller Inhalt)
-$historyTemplate = @(
-    "Get-Date -Format 'yyyy-MM-dd'", "Import-Module Microsoft.PowerShell.Utility",
-    "Get-Process | Select-Object Name, Id", "Invoke-WebRequest -Uri 'https://example.com'",
-    "Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned",
-    "Get-CimInstance -ClassName Win32_OperatingSystem"
-)
-
-$profileTemplate = @"
-# Microsoft PowerShell Profile Variant
-# Copyright (c) Microsoft Corporation
-`$ErrorActionPreference = 'Stop'
-function Get-SystemInfo {
-    param([switch]`$Detailed)
-    if (`$Detailed) { Get-ComputerInfo | Select-Object * } else { Get-ComputerInfo | Select-Object CsName, OsVersion }
-}
-Import-Module CimCmdlets -ErrorAction SilentlyContinue
-Write-Host "PowerShell Initialized - Version `$(`$PSVersionTable.PSVersion)"
-"@
-
-$moduleTemplate = @"
-# Microsoft Module Example
-# Copyright (c) Microsoft Corporation
-function UtilityFunc {
-    param([string]`$Param = 'Default')
-    try { Write-Output "`$Param processed" } catch { Write-Error "`$_" }
-}
-function AdvancedLoop {
-    param([int]`$Count = 20)
-    1..`$Count | ForEach-Object { Write-Output "Loop `$_" }
-}
-Export-ModuleMember -Function UtilityFunc, AdvancedLoop
-"@
-
-$manifestTemplate = @"
-@{
-    ModuleVersion = '$(Get-Random -InputObject @("5.1.0", "7.0.1", "7.4.2"))'
-    GUID = '$(New-Guid)'
-    Author = 'Microsoft Corporation'
-    CompanyName = 'Microsoft'
-    Copyright = '(c) Microsoft Corporation. All rights reserved.'
-    FunctionsToExport = '*'
-    NestedModules = @('Nested.psm1')
-    RequiredModules = @('Microsoft.PowerShell.Core')
-}
-"@
-
-$logTemplate = "[{0}] {1}: {2}" # Wird später formatiert
-
-$xmlTemplate = @"
-<Configuration>
-    <Settings>
-        <ExecutionPolicy>RemoteSigned</ExecutionPolicy>
-        <Modules>
-            <Module Name="$(Get-Random -InputObject @("BitsTransfer", "CimCmdlets"))" Version="7.4" />
-        </Modules>
-    </Settings>
-</Configuration>
-"@
-
-$miscTemplate = "Fake content for noise: $(New-Guid)`nAdditional lines:`n" + ($historyTemplate -join "`n")
-
-# Funktion zum Erzeugen einer Datei in einem spezifischen Ordner (mit Typ-Anpassung)
-function Create-FileInFolder {
-    param (
-        [string]$subPath,
-        [int]$index
-    )
-    $filePath = ""
-    $content = ""
-    $randType = Get-Random -Minimum 1 -Maximum 7
-
-    # Ordner-spezifische Anpassung
-    if ($subPath -like "*Logs*") { $randType = 5 }  # Logs für Log-Ordner
-    elseif ($subPath -like "*Modules*") { $randType = Get-Random -InputObject @(3,4) }  # Modules/Manifests für Module-Ordner
-    elseif ($subPath -like "*Configs*") { $randType = 6 }  # XML für Configs
-    elseif ($subPath -like "*PSReadLine*") { $randType = 1 }  # History für PSReadLine
-    elseif ($subPath -like "*Scripts*") { $randType = Get-Random -InputObject @(2,5) }  # Profiles/Logs für Scripts
-    elseif ($subPath -like "*Cache*" -or $subPath -like "*Temp*" -or $subPath -like "*Backups*") { $randType = 7 }  # Misc für Cache/Temp/Backups
-    elseif ($subPath -like "*Help*" -or $subPath -like "*Telemetry*" -or $subPath -like "*Extensions*") { $randType = 7 }  # Misc für Help/Telemetry/Extensions
-
-    switch ($randType) {
-        1 { # History TXT
-            $filePath = Join-Path $basePath "$subPath\HistoryVariant_$index.txt"
-            $content = ($historyTemplate + (1..(Get-Random -Min 10 -Max 30) | ForEach-Object { $historyTemplate | Get-Random })) -join "`n"
-        }
-        2 { # Profile PS1
-            $filePath = Join-Path $basePath "$subPath\ProfileVariant_$index.ps1"
-            $content = $profileTemplate + "`n# Folder-Specific Code`nfunction FolderFunc { Write-Output 'In $subPath' }"
-        }
-        3 { # Module PSM1
-            $filePath = Join-Path $basePath "$subPath\ModuleVariant_$index.psm1"
-            $content = $moduleTemplate + "`n# Folder-Specific Func`nfunction SubFunc { 'Sub' }"
-        }
-        4 { # Manifest PSD1
-            $filePath = Join-Path $basePath "$subPath\ManifestVariant_$index.psd1"
-            $content = $manifestTemplate
-        }
-        5 { # Logs
-            $filePath = Join-Path $basePath "$subPath\SessionLog_$index.log"
-            $content = (1..(Get-Random -Min 20 -Max 50) | ForEach-Object { 
-                $logTemplate -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), (Get-Random -InputObject @("INFO", "DEBUG", "WARNING", "ERROR")), "Event in $subPath - $_", (Get-Random -InputObject @("Core", "Utility")) 
-            }) -join "`n"
-        }
-        6 { # XML Configs
-            $filePath = Join-Path $basePath "$subPath\ConfigVariant_$index.xml"
-            $content = $xmlTemplate
-        }
-        default { # Misc
-            $filePath = Join-Path $basePath "$subPath\MiscFile_$index.txt"
-            $content = $miscTemplate
-        }
-    }
-
-    if ($filePath -and -not (Test-Path $filePath)) {
-        try {
-            Set-Content -Path $filePath -Value $content -Force -ErrorAction Stop
-        } catch {
-            return  # Überspringen
-        }
-    }
-
-    if (Test-Path $filePath) {
-        $item = Get-Item $filePath -ErrorAction SilentlyContinue
-        if ($item -and $item.PSObject.Properties['Attributes'] -ne $null) {
-            try {
-                # Zufällig ReadOnly (40%)
-                if ((Get-Random -Maximum 100) -lt 40) {
-                    $item.Attributes = $item.Attributes -bor [System.IO.FileAttributes]::ReadOnly
-                }
-                # Zufällig Hidden (50%)
-                if ((Get-Random -Maximum 100) -lt 50) {
-                    $item.Attributes = $item.Attributes -bor [System.IO.FileAttributes]::Hidden
-                }
-            } catch {}
-        }
-        if ($item -and $item.PSObject.Properties['LastWriteTime'] -ne $null) {
-            try {
-                $item.LastWriteTime = (Get-Date).AddDays(- (Get-Random -Maximum 1825))
-            } catch {}
-        }
-    }
-}
-
-# Zuerst randomisierte Dateien generieren (wie zuvor, aber mit erweiterten subs)
+# 1. Zufällige Haupt-Noise-Dateien
 for ($i = 1; $i -le $NumFiles; $i++) {
-    $randType = Get-Random -Minimum 1 -Maximum 7
-    $filePath = ""
-    $content = ""
-
-    switch ($randType) {
-        1 { # History TXT (erweitert)
-            $sub = Get-Random -InputObject @("PSReadLine", "PSReadLine\Archives", "PSReadLine\Backups", "PSReadLine\Verbose")
-            $filePath = Join-Path $basePath "$sub\HistoryVariant_$i.txt"
-            $content = ($historyTemplate + (1..(Get-Random -Min 20 -Max 50) | ForEach-Object { $historyTemplate | Get-Random })) -join "`n"
-        }
-        2 { # Profile PS1
-            $sub = Get-Random -InputObject @("Scripts\Profiles", "Scripts\Utilities", "Scripts\Archives")
-            $filePath = Join-Path $basePath "$sub\ProfileVariant_$i.ps1"
-            $content = $profileTemplate + "`n# Additional Code`nfunction ExtraFunc { Write-Output 'Extra' }"
-        }
-        3 { # Module PSM1 (erweitert)
-            $mod = Get-Random -InputObject @("Modules\Microsoft.PowerShell.Core\5.1", "Modules\Microsoft.PowerShell.Core\5.1\Types", "Modules\Microsoft.PowerShell.Core\5.1\Formats", "Modules\Microsoft.PowerShell.Core\7.4", "Modules\Microsoft.PowerShell.Utility\7.0\NestedModules", "Modules\Microsoft.PowerShell.Utility\7.4", "Modules\CimCmdlets\5.1", "Modules\CimCmdlets\7.4\Help", "Modules\BitsTransfer\7.4", "Modules\Microsoft.WSMan.Management\7.4")
-            $filePath = Join-Path $basePath "$mod\ModuleVariant_$i.psm1"
-            $content = $moduleTemplate + "`n# More Functions`nfunction AnotherFunc { param([int]`$Num) `$Num * 2 }"
-        }
-        4 { # Manifest PSD1 (erweitert)
-            $mod = Get-Random -InputObject @("Modules\Microsoft.PowerShell.Core\7.4", "Modules\Microsoft.PowerShell.Core\5.1\Types", "Modules\Microsoft.PowerShell.Utility\7.0", "Modules\Microsoft.PowerShell.Utility\7.0\NestedModules", "Modules\Microsoft.WSMan.Management\7.4", "Modules\CimCmdlets\7.4\Help")
-            $filePath = Join-Path $basePath "$mod\ManifestVariant_$i.psd1"
-            $content = $manifestTemplate
-        }
-        5 { # Logs
-            $logSub = Get-Random -InputObject @("Scripts\Logs\Error", "Scripts\Logs\Warning", "Scripts\Logs\Info", "Telemetry\Logs")
-            $filePath = Join-Path $basePath "$logSub\SessionLog_$i.log"
-            $content = (1..(Get-Random -Min 50 -Max 100) | ForEach-Object { 
-                $logTemplate -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), (Get-Random -InputObject @("INFO", "DEBUG", "WARNING", "ERROR")), "Simulated event - Module loaded $_", (Get-Random -InputObject @("Core", "Utility")) 
-            }) -join "`n"
-        }
-        6 { # XML Configs
-            $confSub = Get-Random -InputObject @("Configs\Settings", "Configs\Dependencies")
-            $filePath = Join-Path $basePath "$confSub\ConfigVariant_$i.xml"
-            $content = $xmlTemplate
-        }
-        default { # Misc (erweitert)
-            $miscSub = Get-Random -InputObject @("Cache\ModuleCache", "Cache\CommandCache", "Temp", "Backups", "Extensions\Debuggers", "Help\Languages\en-US", "Telemetry\Logs", "Scripts\Utilities", "Scripts\Archives")
-            $filePath = Join-Path $basePath "$miscSub\MiscFile_$i.txt"
-            $content = $miscTemplate
-        }
+    $type = Get-Random -Minimum 1 -Maximum 8
+    $sub = switch ($type) {
+        1 { Get-Random -InputObject @("PSReadLine","PSReadLine\Archives","PSReadLine\Backups","PSReadLine\Verbose") }
+        2 { Get-Random -InputObject @("Scripts\Profiles","Scripts\Utilities") }
+        3 { Get-Random -InputObject $subFolders | Where-Object { $_ -like "*Modules*" } }
+        4 { Get-Random -InputObject $subFolders | Where-Object { $_ -like "*Modules*" } }
+        5 { Get-Random -InputObject @("Scripts\Logs\Error","Scripts\Logs\Warning","Scripts\Logs\Info","Telemetry\Logs") }
+        6 { Get-Random -InputObject @("Configs\Settings","Configs\Dependencies") }
+        default { Get-Random -InputObject $subFolders }
     }
-
-    if ($filePath -and -not (Test-Path $filePath)) {
-        try {
-            Set-Content -Path $filePath -Value $content -Force -ErrorAction Stop
-        } catch {
-            continue
-        }
-    }
-
-    if (Test-Path $filePath) {
-        $item = Get-Item $filePath -ErrorAction SilentlyContinue
-        if ($item -and $item.PSObject.Properties['Attributes'] -ne $null) {
-            try {
-                if ((Get-Random -Maximum 100) -lt 40) {
-                    $item.Attributes = $item.Attributes -bor [System.IO.FileAttributes]::ReadOnly
-                }
-                if ((Get-Random -Maximum 100) -lt 50) {
-                    $item.Attributes = $item.Attributes -bor [System.IO.FileAttributes]::Hidden
-                }
-            } catch {}
-        }
-        if ($item -and $item.PSObject.Properties['LastWriteTime'] -ne $null) {
-            try {
-                $item.LastWriteTime = (Get-Date).AddDays(- (Get-Random -Maximum 1825))
-            } catch {}
-        }
-    }
+    New-NoiseFile -SubPath $sub -IndexSuffix $i
 }
 
-# Zusätzliche systematische Befüllung: Mindestens 1-3 Dateien pro Ordner
+# 2. Garantierte Befüllung: Jeder Ordner bekommt 1–3 zusätzliche Dateien
 foreach ($sub in $subFolders) {
-    $minFilesPerFolder = Get-Random -Minimum 1 -Maximum 3
-    for ($j = 1; $j -le $minFilesPerFolder; $j++) {
-        $uniqueIndex = "min$(Get-Random -Maximum 10000)_$j"  # Eindeutig, um Duplikate zu vermeiden
-        Create-FileInFolder -subPath $sub -index $uniqueIndex
+    $count = Get-Random -Minimum 1 -Maximum 4
+    for ($j = 1; $j -le $count; $j++) {
+        $suffix = "fill_$(Get-Random -Maximum 99999)_$j"
+        New-NoiseFile -SubPath $sub -IndexSuffix $suffix
     }
 }
 
-Write-Host "Erweiterte Noise-Struktur erstellt: Ca. $NumFiles + zusätzliche Dateien in $basePath. Fast jeder Ordner enthält nun sinnvolle Dateien."
+Write-Host "Noise-Struktur erfolgreich erstellt!"
+Write-Host "Pfad: $basePath"
+Write-Host "Ca. $($NumFiles + ($subFolders.Count * 2)) Dateien verteilt auf $(($subFolders.Count) + 1) Ordner."
+Write-Host "Alle Ordner enthalten nun authentische, microsoft-ähnliche Dateien."
