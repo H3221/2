@@ -1,8 +1,8 @@
 # Professional Noise Generator for PowerShell Obfuscation
 # Author: Conceptualized for Advanced Cybersecurity Labs (Professor-Level)
-# Version: 1.0 - Utilizes PS7+ Features for Efficiency
-# Usage: .\prof_noise.ps1 [-MaxFiles <int>] [-Seed <int>] [-DryRun] [-Cleanup]
-# Note: Designed for maximal noise with Gaussian timestamp distribution and procedural content generation
+# Version: 1.1 - Fixed InvalidUsingExpression in Parallel Scope
+# Usage: .\revere.ps1 [-MaxFiles <int>] [-Seed <int>] [-DryRun] [-Cleanup]
+# Note: Requires PowerShell 7+ for -Parallel. Designed for maximal noise with minimal detectability.
 
 param (
     [int]$MaxFiles = 1000,  # Target number of files (scalable to 5000+)
@@ -10,6 +10,23 @@ param (
     [switch]$DryRun,  # Simulate without writing
     [switch]$Cleanup  # Remove all generated content
 )
+
+# Check PowerShell Version
+if ($PSVersionTable.PSVersion.Major -lt 7) {
+    Write-Error "This script requires PowerShell 7+ for -Parallel execution."
+    return
+}
+
+# Extension for Gaussian (normal distribution) random - C# Add-Type
+Add-Type -MemberDefinition @'
+public double NextGaussian(double mu = 0, double sigma = 1) {
+    var rng = new System.Random();  // Internal RNG for thread-safety
+    double u1 = rng.NextDouble();
+    double u2 = rng.NextDouble();
+    double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
+    return mu + sigma * randStdNormal;
+}
+'@ -Name 'RandomExt' -Namespace 'Custom' -ReferencedAssemblies 'System.Runtime.Extensions'
 
 class NoiseGenerator {
     [string]$BasePath = "$env:APPDATA\Microsoft\Windows\PowerShell"
@@ -186,8 +203,8 @@ Export-ModuleMember -Function Get-AdvancedUtility, Invoke-ProcGen
         
         $this.SubFolders | ForEach-Object -Parallel {
             $localRng = [System.Random]::new((Get-Date).Millisecond + $using:Seed)
-            $localBasePath = $using:this.BasePath
-            $localTemplates = $using:this.Templates
+            $localBasePath = $using:generator.BasePath  # Access via instance
+            $localTemplates = $using:generator.Templates
             $dryRun = $using:DryRun
             $sub = $_
             
@@ -208,9 +225,9 @@ Export-ModuleMember -Function Get-AdvancedUtility, Invoke-ProcGen
                     $item = Get-Item $filePath -ErrorAction SilentlyContinue
                     if ($item) {
                         # Gaussian timestamp: Mean -2 years, SD 1 year
-                        $daysBack = [math]::Round($localRng.NextGaussian() * 365 + 730)  # Requires custom NextGaussian
+                        $daysBack = [math]::Round([Custom.RandomExt]::new().NextGaussian(730, 365))  # Use the added type
                         $item.LastWriteTime = (Get-Date).AddDays(-$daysBack)
-                        $using:this.SetAttributes($filePath, 'File', $localRng)
+                        $using:generator.SetAttributes($filePath, 'File', $localRng)
                     }
                 }
             }
@@ -234,16 +251,6 @@ Export-ModuleMember -Function Get-AdvancedUtility, Invoke-ProcGen
         Remove-Item -Path $this.BasePath -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
-
-# Extension for Gaussian (normal distribution) random
-Add-Type -MemberDefinition @'
-public double NextGaussian(double mu = 0, double sigma = 1) {
-    double u1 = NextDouble();
-    double u2 = NextDouble();
-    double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-    return mu + sigma * randStdNormal;
-}
-'@ -Name 'RandomExt' -Namespace 'System' -ReferencedAssemblies 'System.Runtime.Extensions'  # Custom for distribution
 
 $generator = [NoiseGenerator]::new($Seed)
 
