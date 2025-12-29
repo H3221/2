@@ -1,8 +1,8 @@
 # Professional Noise Generator for PowerShell Obfuscation
 # Author: Conceptualized for Advanced Cybersecurity Labs (Professor-Level)
-# Version: 1.5 - Removed Add-Type, used pure PS Gaussian; Fixed all parser issues
+# Version: 1.6 - Removed -Parallel for compatibility with PS5.1+; Pure PS Gaussian
 # Usage: .\revere.ps1 [-MaxFiles <int>] [-Seed <int>] [-DryRun] [-Cleanup]
-# Note: Requires PowerShell 7+ for -Parallel. Designed for maximal noise with minimal detectability.
+# Note: Compatible with PowerShell 5.1+. For large MaxFiles, it may be slower.
 
 param (
     [int]$MaxFiles = 1000,  # Target number of files (scalable to 5000+)
@@ -10,12 +10,6 @@ param (
     [switch]$DryRun,  # Simulate without writing
     [switch]$Cleanup  # Remove all generated content
 )
-
-# Check PowerShell Version
-if ($PSVersionTable.PSVersion.Major -lt 7) {
-    Write-Error "This script requires PowerShell 7+ for -Parallel execution."
-    return
-}
 
 # Pure PowerShell Gaussian function (Box-Muller transform)
 function NextGaussian {
@@ -198,13 +192,13 @@ Export-ModuleMember -Function Get-AdvancedUtility, Invoke-ProcGen
         $fileTypes = @('History', 'Profile', 'Module', 'Manifest', 'Log', 'XmlConfig')
         $baseCount = [math]::Round($MaxFiles / $this.SubFolders.Count)
         
-        $this.SubFolders | ForEach-Object -Parallel {
-            $localRng = [System.Random]::new((Get-Date).Millisecond + $using:Seed)
-            $localBasePath = $using:generator.BasePath
-            $localTemplates = $using:generator.Templates
-            $localDryRun = $using:generator.DryRun  # Use local copy for scope
+        foreach ($sub in $this.SubFolders) {
+            $localRng = [System.Random]::new((Get-Date).Millisecond + $Seed)
+            $localBasePath = $this.BasePath
+            $localTemplates = $this.Templates
+            $localDryRun = $this.DryRun
 
-            # Local SetAttributes function to avoid using issues
+            # Local SetAttributes function
             function LocalSetAttributes ([string]$Path, [string]$ItemType, [System.Random]$LocalRng) {
                 $item = Get-Item $Path -ErrorAction SilentlyContinue
                 if ($item) {
@@ -216,21 +210,6 @@ Export-ModuleMember -Function Get-AdvancedUtility, Invoke-ProcGen
                 }
             }
 
-            # Local NextGaussian (copy to parallel block)
-            function LocalNextGaussian {
-                param (
-                    [double]$mu = 0,
-                    [double]$sigma = 1
-                )
-                $rand = New-Object System.Random
-                $u1 = $rand.NextDouble()
-                $u2 = $rand.NextDouble()
-                $randStdNormal = [math]::Sqrt(-2.0 * [math]::Log($u1)) * [math]::Sin(2.0 * [math]::PI * $u2)
-                return $mu + $sigma * $randStdNormal
-            }
-
-            $sub = $_
-            
             for ($i = 1; $i -le $baseCount; $i++) {
                 $type = $fileTypes[$localRng.Next(0, $fileTypes.Count)]
                 $ext = switch ($type) { 'History' {'.txt'}; 'Profile' {'.ps1'}; 'Module' {'.psm1'}; 'Manifest' {'.psd1'}; 'Log' {'.log'}; 'XmlConfig' {'.xml'} }
@@ -275,8 +254,8 @@ Export-ModuleMember -Function Get-AdvancedUtility, Invoke-ProcGen
                     try {
                         Set-Content -Path $filePath -Value $content -ErrorAction Stop
                         $item = Get-Item $filePath
-                        # Gaussian timestamp with pure PS function
-                        $daysBack = [math]::Round( (LocalNextGaussian -mu 730 -sigma 365) )
+                        # Gaussian timestamp
+                        $daysBack = [math]::Round( (NextGaussian -mu 730 -sigma 365) )
                         $item.LastWriteTime = (Get-Date).AddDays(-$daysBack)
                         LocalSetAttributes -Path $filePath -ItemType 'File' -LocalRng $localRng
                     } catch {
@@ -284,7 +263,7 @@ Export-ModuleMember -Function Get-AdvancedUtility, Invoke-ProcGen
                     }
                 }
             }
-        } -ThrottleLimit 4  # Parallel efficiency
+        }
     }
 
     [void]SetAttributes([string]$Path, [string]$ItemType, [System.Random]$LocalRng = $null) {
