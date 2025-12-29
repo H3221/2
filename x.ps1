@@ -1,6 +1,6 @@
 # Professional Noise Generator for PowerShell Obfuscation
 # Author: Conceptualized for Advanced Cybersecurity Labs (Professor-Level)
-# Version: 1.7 - Fixed VariableNotLocal by making $Seed a class property
+# Version: 1.8 - Fixed overload issue by explicit optional param handling in SetAttributes calls
 # Usage: .\revere.ps1 [-MaxFiles <int>] [-Seed <int>] [-DryRun] [-Cleanup]
 # Note: Compatible with PowerShell 5.1+. For large MaxFiles, it may be slower.
 
@@ -186,7 +186,7 @@ Export-ModuleMember -Function Get-AdvancedUtility, Invoke-ProcGen
         foreach ($sub in $this.SubFolders) {
             $fullPath = Join-Path $this.BasePath $sub
             if (-not $this.DryRun) { New-Item -Path $fullPath -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null }
-            $this.SetAttributes($fullPath, 'Directory')
+            $this.SetAttributes($fullPath, 'Directory', $null)  # Explicit $null for optional param
         }
     }
 
@@ -201,7 +201,8 @@ Export-ModuleMember -Function Get-AdvancedUtility, Invoke-ProcGen
             $localDryRun = $this.DryRun
 
             # Local SetAttributes function
-            function LocalSetAttributes ([string]$Path, [string]$ItemType, [System.Random]$LocalRng) {
+            function LocalSetAttributes ([string]$Path, [string]$ItemType, [System.Random]$LocalRng = $null) {
+                if ($null -eq $LocalRng) { $LocalRng = New-Object System.Random }
                 $item = Get-Item $Path -ErrorAction SilentlyContinue
                 if ($item) {
                     $attrs = $item.Attributes
