@@ -1,6 +1,6 @@
 # Professional Noise Generator for PowerShell Obfuscation
 # Author: Conceptualized for Advanced Cybersecurity Labs (Professor-Level)
-# Version: 1.2 - Fixed TypeNotFound and InvalidUsingExpression; Made NextGaussian static
+# Version: 1.3 - Fixed Variable Reference, Type Loading, Scope Issues, and Using Expression
 # Usage: .\revere.ps1 [-MaxFiles <int>] [-Seed <int>] [-DryRun] [-Cleanup]
 # Note: Requires PowerShell 7+ for -Parallel. Designed for maximal noise with minimal detectability.
 
@@ -17,8 +17,9 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
     return
 }
 
-# Extension for Gaussian (normal distribution) random - Made STATIC for thread-safety
-Add-Type -MemberDefinition @'
+# Extension for Gaussian (normal distribution) random - Static method for thread-safety
+try {
+    Add-Type -MemberDefinition @'
 using System;
 
 public class RandomExt {
@@ -31,15 +32,28 @@ public class RandomExt {
     }
 }
 '@ -Name 'RandomExt' -Namespace 'Custom' -ReferencedAssemblies 'System.Runtime.Extensions' -ErrorAction Stop
+} catch {
+    Write-Warning "Failed to load Custom.RandomExt. Falling back to simple random."
+    function NextGaussian {
+        param ([double]$mu = 0, [double]$sigma = 1)
+        $rand = New-Object System.Random
+        $u1 = $rand.NextDouble()
+        $u2 = $rand.NextDouble()
+        $randStdNormal = [math]::Sqrt(-2.0 * [math]::Log($u1)) * [math]::Sin(2.0 * [math]::PI * $u2)
+        return $mu + $sigma * $randStdNormal
+    }
+}
 
 class NoiseGenerator {
     [string]$BasePath = "$env:APPDATA\Microsoft\Windows\PowerShell"
     [System.Random]$Rng
     [hashtable]$Templates
     [array]$SubFolders
+    [bool]$DryRun  # Added as class property for scope safety
 
-    NoiseGenerator([int]$Seed) {
+    NoiseGenerator([int]$Seed, [bool]$DryRun) {
         $this.Rng = [System.Random]::new($Seed)
+        $this.DryRun = $DryRun
         $this.InitializeTemplates()
         $this.InitializeFolders()
     }
@@ -189,7 +203,7 @@ Export-ModuleMember -Function Get-AdvancedUtility, Invoke-ProcGen
     [void]CreateStructure() {
         foreach ($sub in $this.SubFolders) {
             $fullPath = Join-Path $this.BasePath $sub
-            if (-not $DryRun) { New-Item -Path $fullPath -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null }
+            if (-not $this.DryRun) { New-Item -Path $fullPath -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null }
             $this.SetAttributes($fullPath, 'Directory')
         }
     }
@@ -202,7 +216,20 @@ Export-ModuleMember -Function Get-AdvancedUtility, Invoke-ProcGen
             $localRng = [System.Random]::new((Get-Date).Millisecond + $using:Seed)
             $localBasePath = $using:generator.BasePath
             $localTemplates = $using:generator.Templates
-            $dryRun = $using:DryRun
+            $localDryRun = $using:generator.DryRun  # Use local copy for scope
+
+            # Local SetAttributes function to avoid using issues
+            function LocalSetAttributes ([string]$Path, [string]$ItemType, [System.Random]$LocalRng) {
+                $item = Get-Item $Path -ErrorAction SilentlyContinue
+                if ($item) {
+                    $attrs = $item.Attributes
+                    if ($LocalRng.NextDouble() -lt 0.6) { $attrs = $attrs -bor [System.IO.FileAttributes]::ReadOnly }
+                    if ($LocalRng.NextDouble() -lt 0.45) { $attrs = $attrs -bor [System.IO.FileAttributes]::Hidden }
+                    if ($LocalRng.NextDouble() -lt 0.3) { $attrs = $attrs -bor [System.IO.FileAttributes]::Archive }
+                    $item.Attributes = $attrs
+                }
+            }
+
             $sub = $_
             
             for ($i = 1; $i -le $baseCount; $i++) {
@@ -245,16 +272,20 @@ Export-ModuleMember -Function Get-AdvancedUtility, Invoke-ProcGen
                     }
                 }
                 
-                if (-not $dryRun) {
+                if (-not $localDryRun) {
                     try {
                         Set-Content -Path $filePath -Value $content -ErrorAction Stop
                         $item = Get-Item $filePath
-                        # Gaussian timestamp: Mean -2 years (730 days), SD 1 year (365 days)
-                        $daysBack = [math]::Round([Custom.RandomExt]::NextGaussian(730, 365))
+                        # Gaussian timestamp with fallback
+                        $daysBack = if (Get-Command NextGaussian -ErrorAction SilentlyContinue) {
+                            [math]::Round(NextGaussian -mu 730 -sigma 365)
+                        } else {
+                            [math]::Round([Custom.RandomExt]::NextGaussian(730, 365))
+                        }
                         $item.LastWriteTime = (Get-Date).AddDays(-$daysBack)
-                        $using:generator.SetAttributes($filePath, 'File', $localRng)
+                        LocalSetAttributes -Path $filePath -ItemType 'File' -LocalRng $localRng
                     } catch {
-                        Write-Verbose "Failed to create $filePath: $_"
+                        Write-Verbose "Failed to create ${filePath}: $_"  # Fixed variable reference
                     }
                 }
             }
@@ -279,7 +310,7 @@ Export-ModuleMember -Function Get-AdvancedUtility, Invoke-ProcGen
     }
 }
 
-$generator = [NoiseGenerator]::new($Seed)
+$generator = [NoiseGenerator]::new($Seed, $DryRun.IsPresent)
 
 if ($Cleanup) {
     $generator.Cleanup()
