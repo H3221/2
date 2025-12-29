@@ -1,25 +1,27 @@
-# Authentisches PowerShell Noise-Script für TryHackMe
-# Erzeugt eine hochrealistische Microsoft PowerShell-Struktur ohne verdächtige Nummern
-# Usage: powershell.exe -ExecutionPolicy Bypass -File .\noise.ps1 [-NumFiles 600] [-Cleanup]
+# Authentisches PowerShell Noise-Script für TryHackMe – Erweiterte Version
+# Erzeugt realistische Microsoft-ähnliche Struktur + zusätzlichen Noise im Ordner "operations"
+# Schützt den bereits vorhandenen versteckten Unterordner "System" durch massiven, authentischen Noise
+# Usage: powershell.exe -ExecutionPolicy Bypass -File .\noise.ps1 [-NumFiles 800] [-Cleanup]
 
 param (
-    [int]$NumFiles = 600,
+    [int]$NumFiles = 800,
     [switch]$Cleanup
 )
 
 $basePath = "$env:APPDATA\Microsoft\Windows\PowerShell"
+$operationsPath = "$basePath\operations"   # Der Ordner, in dem der versteckte "System"-Ordner liegt
 
 if ($Cleanup) {
     Remove-Item -Path $basePath -Recurse -Force -ErrorAction SilentlyContinue
-    Write-Host "Cleanup abgeschlossen: $basePath entfernt."
+    Write-Host "Cleanup abgeschlossen: $basePath und alle Unterordner entfernt."
     return
 }
 
 # Basisordner sicherstellen
 New-Item -Path $basePath -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null
 
-# Realistische Unterordner-Struktur (basierend auf echten Windows 10/11 + PowerShell 7 Installationen)
-$subFolders = @(
+# 1. Normale realistische PowerShell-Unterordner (wie zuvor)
+$normalFolders = @(
     "PSReadLine\Archives",
     "PSReadLine\Backups",
     "Modules\Microsoft.PowerShell.Core\Types",
@@ -41,8 +43,14 @@ $subFolders = @(
     "Backups"
 )
 
+# operations-Ordner explizit erstellen (falls nicht vorhanden)
+New-Item -Path $operationsPath -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null
+
+# operations als zusätzlichen Ordner zur allgemeinen Befüllung hinzufügen
+$allFolders = $normalFolders + "operations"
+
 # Ordner erstellen und teilweise verstecken
-foreach ($sub in $subFolders) {
+foreach ($sub in $allFolders) {
     $fullPath = Join-Path $basePath $sub
     New-Item -Path $fullPath -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null
 
@@ -91,11 +99,7 @@ function Get-SystemSummary {
     Get-ComputerInfo | Select-Object WindowsProductName, OsVersion, TotalPhysicalMemory
 }
 
-function Test-Admin {
-    ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-}
-
-Export-ModuleMember -Function Get-SystemSummary, Test-Admin
+Export-ModuleMember -Function Get-SystemSummary
 "@
 
 $manifestContent = @"
@@ -107,46 +111,60 @@ $manifestContent = @"
     Copyright         = '(c) Microsoft Corporation. All rights reserved.'
     Description       = 'Internal utility module'
     PowerShellVersion = '5.1'
-    FunctionsToExport = @('Get-SystemSummary', 'Test-Admin')
+    FunctionsToExport = @('Get-SystemSummary')
 }
 "@
 
 $logEntry = "[{0}] {1} - {2}"
 
-# Funktion: Eine authentische Datei in einem Ordner erstellen
+# Spezielle Noise-Namen für den "operations"-Ordner – sehr authentisch und unauffällig
+$operationsFileNames = @(
+    "TaskLog_2024.log", "TaskLog_2025.log",
+    "ScheduledTasks.xml", "TaskHistory.txt",
+    "Maintenance.log", "BackgroundTasks.log",
+    "AutomationConfig.xml", "RunHistory_202412.log",
+    "OperationStatus.json", "Workflow.log",
+    "DailyOperations_$(Get-Date -Format yyyyMMdd).txt",
+    "SystemMaintenance.ps1", "CleanupTask.log",
+    "UpdateCheck.log", "HealthCheck.xml"
+)
+
+# Funktion: Eine authentische Datei erstellen
 function Add-AuthenticFile {
     param([string]$FolderPath)
 
     $possibleNames = @()
     $content = ""
 
-    switch -Wildcard ($FolderPath) {
-        "*PSReadLine*" {
-            $possibleNames = @("HistoryBackup.txt", "SavedCommands.txt", "CommandLog_$(Get-Random -Min 2021 -Max 2025).txt")
-            $content = ($historyLines | Get-Random -Count (Get-Random -Min 20 -Max 80)) -join "`n"
+    # Spezieller Noise für den operations-Ordner → viel Inhalt, um "System" zu überdecken
+    if ($FolderPath -like "*operations") {
+        $possibleNames = $operationsFileNames
+        $content = switch ((Get-Random -Maximum 5)) {
+            0 { (1..(Get-Random -Min 80 -Max 200) | ForEach-Object { $logEntry -f (Get-Date).AddDays(-$_), (Get-Random @("INFO","SUCCESS")), "Scheduled task completed: Daily backup" }) -join "`n" }
+            1 { "<Tasks><Task Name=`"Maintenance`" LastRun=`"$(Get-Date -Format o)`" /><Task Name=`"UpdateCheck`" Status=`"Success`" /></Tasks>" }
+            2 { $profileContent + "`n# Operations-specific script`nStart-Sleep -Seconds 30" }
+            3 { "{`"lastCheck`": `"$(Get-Date -Format o)`", `"tasksCompleted`": $(Get-Random -Min 50 -Max 200)}" }
+            default { "Operation log entry $(Get-Random -Maximum 99999)`nTimestamp: $(Get-Date -Format o)`nStatus: Completed" }
         }
-        "*Profiles*" {
-            $possibleNames = @("Microsoft.PowerShell_profile.ps1", "profile.ps1", "Microsoft.VSCode_profile.ps1")
-            $content = $profileContent
-        }
-        "*Modules*" {
-            if ((Get-Random) % 2 -eq 0) {
-                $possibleNames = @("Utilities.psm1", "CoreFunctions.psm1", "Internal.psm1")
-                $content = $moduleContent
-            } else {
-                $possibleNames = @("Utilities.psd1", "CoreFunctions.psd1", "ModuleManifest.psd1")
-                $content = $manifestContent
+    }
+    else {
+        switch -Wildcard ($FolderPath) {
+            "*PSReadLine*" { $possibleNames = @("HistoryBackup.txt", "SavedCommands.txt", "CommandLog_$(Get-Random -Min 2021 -Max 2025).txt"); $content = ($historyLines | Get-Random -Count (Get-Random -Min 20 -Max 80)) -join "`n" }
+            "*Profiles*"   { $possibleNames = @("Microsoft.PowerShell_profile.ps1", "profile.ps1"); $content = $profileContent }
+            "*Modules*"    { 
+                if ((Get-Random) % 2 -eq 0) { $possibleNames = @("Utilities.psm1", "CoreFunctions.psm1"); $content = $moduleContent }
+                else { $possibleNames = @("Utilities.psd1", "ModuleManifest.psd1"); $content = $manifestContent }
             }
+            "*Logs\Error*"   { $possibleNames = @("Error_$(Get-Date -Format yyyyMMdd).log"); $content = (1..60 | ForEach-Object { $logEntry -f (Get-Date).AddDays(-$_), "ERROR", "Module load failed" }) -join "`n" }
+            "*Logs\Warning*" { $possibleNames = @("Warnings.log"); $content = (1..40 | ForEach-Object { $logEntry -f (Get-Date).AddDays(-$_), "WARNING", "Deprecated feature" }) -join "`n" }
+            "*Logs\Info*"    { $possibleNames = @("Session_$(Get-Date -Format yyyyMMdd_HHmm).log"); $content = (1..80 | ForEach-Object { $logEntry -f (Get-Date).AddDays(-$_), "INFO", "Command executed" }) -join "`n" }
+            "*Telemetry*"    { $possibleNames = @("UsageData.log"); $content = "Telemetry enabled - events: $(Get-Random -Min 100 -Max 1000)" }
+            "*Configs*"      { $possibleNames = @("preferences.xml", "execution.config"); $content = "<configuration><ExecutionPolicy>RemoteSigned</ExecutionPolicy></configuration>" }
+            "*Cache*"        { $possibleNames = @("modulecache.dat", "commandcache.json"); $content = "{`"cached`": $(Get-Random -Min 20 -Max 100)}" }
+            "*Temp*"         { $possibleNames = @("tmp_$(Get-Random -Maximum 99999).tmp"); $content = "# Temp script" }
+            "*Backups*"      { $possibleNames = @("profile_backup_$(Get-Date -Format yyyyMMdd).ps1"); $content = $profileContent }
+            default          { $possibleNames = @("notes.txt", "internal.txt"); $content = "Internal note - $(Get-Date)" }
         }
-        "*Logs\Error*"   { $possibleNames = @("Error_$(Get-Date -Format yyyyMMdd).log", "PowerShellErrors.log"); $content = (1..60 | ForEach-Object { $logEntry -f (Get-Date).AddDays(-$_), "ERROR", "Failed to load module X" }) -join "`n" }
-        "*Logs\Warning*" { $possibleNames = @("Warnings.log", "Deprecation.log"); $content = (1..40 | ForEach-Object { $logEntry -f (Get-Date).AddDays(-$_), "WARNING", "Deprecated cmdlet used" }) -join "`n" }
-        "*Logs\Info*"    { $possibleNames = @("Session_$(Get-Date -Format yyyyMMdd_HHmm).log", "Activity.log"); $content = (1..80 | ForEach-Object { $logEntry -f (Get-Date).AddDays(-$_), "INFO", "Command executed successfully" }) -join "`n" }
-        "*Telemetry*"    { $possibleNames = @("UsageData.log", "Telemetry_$(Get-Random -Min 2022 -Max 2025).txt"); $content = "Telemetry collection enabled`nData sent: $(Get-Random -Maximum 1000) events" }
-        "*Configs*"      { $possibleNames = @("preferences.xml", "settings.config", "execution.config"); $content = "<configuration><ExecutionPolicy>RemoteSigned</ExecutionPolicy><LoggingEnabled>true</LoggingEnabled></configuration>" }
-        "*Cache*"        { $possibleNames = @("modulecache.dat", "commandcache.json", "tempdata_$(New-Guid).tmp"); $content = "{`"cachedAt`": `"$(Get-Date -Format o)`", `"entries`": $(Get-Random -Min 10 -Max 100)}" }
-        "*Temp*"         { $possibleNames = @("tmp_$(Get-Random -Maximum 99999).tmp", "scratch.ps1"); $content = "# Temporary script`nGet-Date" }
-        "*Backups*"      { $possibleNames = @("profile_backup_$(Get-Date -Format yyyyMMdd).ps1", "config_backup.xml"); $content = $profileContent }
-        default          { $possibleNames = @("notes.txt", "todo.txt", "internal.txt"); $content = "Internal notes - created $(Get-Date)" }
     }
 
     $fileName = $possibleNames | Get-Random
@@ -158,28 +176,26 @@ function Add-AuthenticFile {
         } catch { return }
     }
 
-    # Attribute und Timestamp setzen
     if (Test-Path $filePath) {
         $item = Get-Item $filePath -ErrorAction SilentlyContinue
         if ($item) {
             try {
                 if ((Get-Random -Maximum 100) -lt 45) { $item.Attributes = $item.Attributes -bor 'ReadOnly' }
                 if ((Get-Random -Maximum 100) -lt 55) { $item.Attributes = $item.Attributes -bor 'Hidden' }
-                $item.LastWriteTime = (Get-Date).AddDays(- (Get-Random -Maximum 1825))
+                $item.LastWriteTime = (Get-Date).AddDays(- (Get-Random -Maximum 1825))  # 2020–2025
             } catch {}
         }
     }
 }
 
 # 1. Zufällige Dateien über alle Ordner verteilen
-$allFolders = @("PSReadLine\Archives", "PSReadLine\Backups") + $subFolders
 for ($i = 1; $i -le $NumFiles; $i++) {
     $targetFolder = Join-Path $basePath ($allFolders | Get-Random)
     Add-AuthenticFile -FolderPath $targetFolder
 }
 
-# 2. Garantierte Befüllung: Jeder Ordner bekommt 3–6 Dateien
-foreach ($sub in $allFolders) {
+# 2. Garantierte Befüllung aller normalen Ordner (3–6 Dateien)
+foreach ($sub in $normalFolders) {
     $fullSub = Join-Path $basePath $sub
     $extraCount = Get-Random -Minimum 3 -Maximum 6
     for ($j = 1; $j -le $extraCount; $j++) {
@@ -187,12 +203,15 @@ foreach ($sub in $allFolders) {
     }
 }
 
-Write-Host "Authentische Microsoft-ähnliche PowerShell-Noise-Struktur erfolgreich erstellt!"
+# 3. MASSIVER NOISE im operations-Ordner → Schutz für den versteckten "System"-Ordner
+$operationsFullPath = $operationsPath
+$heavyNoiseCount = 40 + (Get-Random -Minimum 20 -Maximum 60)  # 60–100 Dateien im operations-Ordner
+for ($k = 1; $k -le $heavyNoiseCount; $k++) {
+    Add-AuthenticFile -FolderPath $operationsFullPath
+}
+
+Write-Host "Erweiterte authentische Noise-Struktur erfolgreich erstellt!"
 Write-Host "Pfad: $basePath"
-Write-Host "Enthält realistische Dateinamen wie:"
-Write-Host "   - Microsoft.PowerShell_profile.ps1"
-Write-Host "   - Error_20241229.log"
-Write-Host "   - Utilities.psm1 / .psd1"
-Write-Host "   - HistoryBackup_2023.txt"
-Write-Host "   - Telemetry-Daten, Cache, Configs usw."
-Write-Host "Gesamt: Über $NumFiles Dateien + garantierte Befüllung aller Ordner."
+Write-Host "Besonderer Schutz: Der Ordner 'operations' enthält nun $heavyNoiseCount+ realistische Dateien"
+Write-Host "→ Der bereits vorhandene versteckte Unterordner 'System' ist nun stark durch Noise geschützt."
+Write-Host "Gesamt: Über $NumFiles Dateien + intensive Befüllung aller Ordner."
