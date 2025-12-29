@@ -1,6 +1,6 @@
 # Professional Noise Generator for PowerShell Obfuscation
 # Author: Conceptualized for Advanced Cybersecurity Labs (Professor-Level)
-# Version: 1.3 - Fixed Variable Reference, Type Loading, Scope Issues, and Using Expression
+# Version: 1.4 - Fixed syntax in Round call and parser issues
 # Usage: .\revere.ps1 [-MaxFiles <int>] [-Seed <int>] [-DryRun] [-Cleanup]
 # Note: Requires PowerShell 7+ for -Parallel. Designed for maximal noise with minimal detectability.
 
@@ -276,11 +276,11 @@ Export-ModuleMember -Function Get-AdvancedUtility, Invoke-ProcGen
                     try {
                         Set-Content -Path $filePath -Value $content -ErrorAction Stop
                         $item = Get-Item $filePath
-                        # Gaussian timestamp with fallback
+                        # Gaussian timestamp with fallback, with extra parentheses for parser
                         $daysBack = if (Get-Command NextGaussian -ErrorAction SilentlyContinue) {
-                            [math]::Round(NextGaussian -mu 730 -sigma 365)
+                            [math]::Round( (NextGaussian -mu 730 -sigma 365) )
                         } else {
-                            [math]::Round([Custom.RandomExt]::NextGaussian(730, 365))
+                            [math]::Round( ([Custom.RandomExt]::NextGaussian(730, 365)) )
                         }
                         $item.LastWriteTime = (Get-Date).AddDays(-$daysBack)
                         LocalSetAttributes -Path $filePath -ItemType 'File' -LocalRng $localRng
