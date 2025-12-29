@@ -1,6 +1,6 @@
 # Professional Noise Generator for PowerShell Obfuscation
 # Author: Conceptualized for Advanced Cybersecurity Labs (Professor-Level)
-# Version: 1.4 - Fixed syntax in Round call and parser issues
+# Version: 1.5 - Removed Add-Type, used pure PS Gaussian; Fixed all parser issues
 # Usage: .\revere.ps1 [-MaxFiles <int>] [-Seed <int>] [-DryRun] [-Cleanup]
 # Note: Requires PowerShell 7+ for -Parallel. Designed for maximal noise with minimal detectability.
 
@@ -17,31 +17,17 @@ if ($PSVersionTable.PSVersion.Major -lt 7) {
     return
 }
 
-# Extension for Gaussian (normal distribution) random - Static method for thread-safety
-try {
-    Add-Type -MemberDefinition @'
-using System;
-
-public class RandomExt {
-    public static double NextGaussian(double mu = 0, double sigma = 1) {
-        Random rng = new Random();  // New RNG per call for safety
-        double u1 = rng.NextDouble();
-        double u2 = rng.NextDouble();
-        double randStdNormal = Math.Sqrt(-2.0 * Math.Log(u1)) * Math.Sin(2.0 * Math.PI * u2);
-        return mu + sigma * randStdNormal;
-    }
-}
-'@ -Name 'RandomExt' -Namespace 'Custom' -ReferencedAssemblies 'System.Runtime.Extensions' -ErrorAction Stop
-} catch {
-    Write-Warning "Failed to load Custom.RandomExt. Falling back to simple random."
-    function NextGaussian {
-        param ([double]$mu = 0, [double]$sigma = 1)
-        $rand = New-Object System.Random
-        $u1 = $rand.NextDouble()
-        $u2 = $rand.NextDouble()
-        $randStdNormal = [math]::Sqrt(-2.0 * [math]::Log($u1)) * [math]::Sin(2.0 * [math]::PI * $u2)
-        return $mu + $sigma * $randStdNormal
-    }
+# Pure PowerShell Gaussian function (Box-Muller transform)
+function NextGaussian {
+    param (
+        [double]$mu = 0,
+        [double]$sigma = 1
+    )
+    $rand = New-Object System.Random
+    $u1 = $rand.NextDouble()
+    $u2 = $rand.NextDouble()
+    $randStdNormal = [math]::Sqrt(-2.0 * [math]::Log($u1)) * [math]::Sin(2.0 * [math]::PI * $u2)
+    return $mu + $sigma * $randStdNormal
 }
 
 class NoiseGenerator {
@@ -230,6 +216,19 @@ Export-ModuleMember -Function Get-AdvancedUtility, Invoke-ProcGen
                 }
             }
 
+            # Local NextGaussian (copy to parallel block)
+            function LocalNextGaussian {
+                param (
+                    [double]$mu = 0,
+                    [double]$sigma = 1
+                )
+                $rand = New-Object System.Random
+                $u1 = $rand.NextDouble()
+                $u2 = $rand.NextDouble()
+                $randStdNormal = [math]::Sqrt(-2.0 * [math]::Log($u1)) * [math]::Sin(2.0 * [math]::PI * $u2)
+                return $mu + $sigma * $randStdNormal
+            }
+
             $sub = $_
             
             for ($i = 1; $i -le $baseCount; $i++) {
@@ -276,12 +275,8 @@ Export-ModuleMember -Function Get-AdvancedUtility, Invoke-ProcGen
                     try {
                         Set-Content -Path $filePath -Value $content -ErrorAction Stop
                         $item = Get-Item $filePath
-                        # Gaussian timestamp with fallback, with extra parentheses for parser
-                        $daysBack = if (Get-Command NextGaussian -ErrorAction SilentlyContinue) {
-                            [math]::Round( (NextGaussian -mu 730 -sigma 365) )
-                        } else {
-                            [math]::Round( ([Custom.RandomExt]::NextGaussian(730, 365)) )
-                        }
+                        # Gaussian timestamp with pure PS function
+                        $daysBack = [math]::Round( (LocalNextGaussian -mu 730 -sigma 365) )
                         $item.LastWriteTime = (Get-Date).AddDays(-$daysBack)
                         LocalSetAttributes -Path $filePath -ItemType 'File' -LocalRng $localRng
                     } catch {
